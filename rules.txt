@@ -1,0 +1,11 @@
+NO UPPERCASE in:
+- folder names
+- file names
+- imports
+Examples:
+✅ index.tsx   ❌ Index.tsx
+✅ allimages   ❌ allImages
+IMAGES RULES
+- all image files lowercase
+- access images ONLY via app/utils/allimages.ts
+- never use require() directly in screens
