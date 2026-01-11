@@ -1,5 +1,5 @@
 // scripts/generate_native_audio_edge_tts.mjs
-// auto-generate mp3s using Microsoft Edge TTS (edge-tts via `py -m edge_tts`)
+// auto-generate mp3s using Microsoft Edge TTS (edge-tts via Python module `edge_tts`)
 // output: assets/audio/<lang>/<id>.mp3
 // safe: skips files that already exist
 //
@@ -7,8 +7,10 @@
 //   node scripts/generate_native_audio_edge_tts.mjs --lang yo
 //   node scripts/generate_native_audio_edge_tts.mjs --lang yo --from 11 --to 20
 //
-// requirements:
+// requirements (one time):
 //   py -m pip install edge-tts
+// or
+//   python -m pip install edge-tts
 
 import fs from "fs";
 import path from "path";
@@ -49,9 +51,7 @@ const rate = args.get("rate") || "+0%";
 const pitch = args.get("pitch") || "+0Hz";
 const volume = args.get("volume") || "+0%";
 
-// Yoruba voices are not available in your list right now (yo-* returned nothing).
-// Using Nigeria English as a safe fallback so automation can scale.
-// You can later swap to Azure/Google for true Yoruba pronunciation.
+// Voice mapping (locked)
 const voices = {
   yo: "en-NG-EzinneNeural",
   ig: "en-NG-EzinneNeural",
@@ -120,15 +120,22 @@ function fileExists(p) {
 function writeTempTextFile(id, lang, text) {
   const tmpDir = path.join(projectRoot, ".tmp");
   ensureDir(tmpDir);
-  const p = path.join(tmpDir, `${lang}_${id}.txt`);
+
+  // Add a little uniqueness so parallel runs never collide
+  const stamp = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const p = path.join(tmpDir, `${lang}_${id}_${stamp}.txt`);
+
   fs.writeFileSync(p, text, "utf8");
   return p;
 }
 
-// IMPORTANT: use --file instead of --text to avoid punctuation/quoting problems.
-function runEdgeTts({ voice, textFilePath, outPath }) {
+/**
+ * Try running edge_tts using:
+ * 1) py -m edge_tts
+ * 2) python -m edge_tts   (fallback)
+ */
+function runEdgeTtsOnce({ cmd, voice, textFilePath, outPath }) {
   return new Promise((resolve) => {
-    const cmd = "py";
     const a = [
       "-m",
       "edge_tts",
@@ -157,6 +164,46 @@ function runEdgeTts({ voice, textFilePath, outPath }) {
       resolve({ ok: code === 0, code, stderr });
     });
   });
+}
+
+async function runEdgeTts({ voice, textFilePath, outPath }) {
+  // First try `py`
+  const res1 = await runEdgeTtsOnce({ cmd: "py", voice, textFilePath, outPath });
+  if (res1.ok) return res1;
+
+  // If it looks like py isn't found, try python
+  const pyNotFound =
+    /'py' is not recognized|py: not found|cannot find the file/i.test(res1.stderr || "");
+  const moduleMissing =
+    /no module named edge_tts/i.test(res1.stderr || "") ||
+    /ModuleNotFoundError:.*edge_tts/i.test(res1.stderr || "");
+
+  // If module missing, python will also fail — but we still try once so the user gets clearer logs.
+  if (pyNotFound || moduleMissing) {
+    const res2 = await runEdgeTtsOnce({
+      cmd: "python",
+      voice,
+      textFilePath,
+      outPath,
+    });
+    // Prefer the second result if it succeeded, else return the "best" error output.
+    if (res2.ok) return res2;
+
+    // Merge stderr for clarity
+    const merged = [
+      `Tried: py -m edge_tts (failed)`,
+      (res1.stderr || "").trim(),
+      `\nTried: python -m edge_tts (failed)`,
+      (res2.stderr || "").trim(),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return { ok: false, code: res2.code, stderr: merged };
+  }
+
+  // Otherwise, return first failure
+  return res1;
 }
 
 async function main() {
@@ -195,12 +242,10 @@ async function main() {
     process.exit(1);
   }
 
-  if (lang === "yo" && voice.startsWith("en-")) {
+  // Friendly warning (expected behavior)
+  if (lang === "yo" || lang === "ig") {
     console.log(
-      "\nWARNING: Yoruba (yo-*) voices are not available in your Edge TTS voice list."
-    );
-    console.log(
-      `Using fallback voice "${voice}" to generate mp3s so you can scale automation now.\n`
+      `\nNOTE: ${lang.toUpperCase()} is using a Nigeria English voice (${voice}) for automation.\n`
     );
   }
 
@@ -244,17 +289,25 @@ async function main() {
     // cleanup temp file
     try {
       fs.unlinkSync(textFilePath);
-    } catch {
-      // no-op
-    }
+    } catch {}
 
     if (res.ok && fileExists(outPath)) {
       made++;
       console.log("ok");
     } else {
       failed++;
-      console.log("FAILED");
-      if (res.stderr) console.log(res.stderr.trim());
+      console.log("FAILED\n");
+
+      const msg = String(res.stderr || "").trim();
+      if (msg) console.log(msg);
+
+      // Specific hint for the most common problem
+      if (/no module named edge_tts/i.test(msg)) {
+        console.log(
+          "\nFIX THIS ONCE:\n  py -m pip install edge-tts\n(or)\n  python -m pip install edge-tts\n"
+        );
+      }
+
       process.exit(1);
     }
 

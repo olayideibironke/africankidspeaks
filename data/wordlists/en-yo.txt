@@ -1,0 +1,586 @@
+a / an - Kan
+abandon - Fì sílẹ̀
+ability - Agbára
+able - Lè
+about - Nípa
+above - Lókè
+abroad - Lọ́nà òkèrè
+absent - Kò sí
+accept - Gbà
+accident - Ìjọ̀nì
+account - Ìtòsónà
+accuse - Fi ẹ̀sùn sílẹ̀
+ache - Ríru
+achieve - Gbógun
+across - Lápapọ̀
+act - Ṣiṣe
+active - Alágbará
+actor - Òṣèré
+add - Rò pọ̀
+address - Adirẹsi
+admire - Yìn
+admit - Jẹ́wọ́
+adult - Ọmọdé agbalagba
+advance - Ilọsiwaju
+advantage - Anfàani
+adventure - Ìrìn àjò
+advice - Ìmọ̀rán
+afraid - Ẹ̀rù
+after - Lẹ́yìn
+afternoon - Ọ̀sán
+again - Lẹ́ẹ̀kansi
+against - Ìdàkejì
+age - Ọjọ́ orí
+ago - Sẹ́yìn
+agree - Fọwọ́ sí
+air - Afẹ́fẹ́
+airport - Pápá ọkọ̀ ofurufu
+alive - Wà láyè
+all - Gbogbo
+allow - Gba láyè
+almost - Fẹ́rẹ̀
+alone - Nìkan
+along - Pẹ̀lú
+already - Ti
+also - Pẹ̀lú
+although - Bó tilẹ̀ jẹ́ wípé
+always - Láìpẹ́
+amaze - Yẹnú
+ambition - Ifẹ́ ọkàn
+among - Lára
+amount - Iye
+amuse - Tẹrí ba
+ancestor - Bàbà ńlá
+ancient - Àtijọ́
+and - Àti
+anger - Ìbínú
+angry - Bínú
+animal - Ẹranko
+announce - Ṣe ìpolongo
+annoy - Binú
+another - Òmíràn
+answer - Ìdáhùn
+ant - Erè
+anxious - Dàníjú
+any - Ẹnikẹ́ni
+apart - Ya sọtọ̀
+apology - Ìtọrọ̀ àforíjìn
+appear - Hàn
+apple - Ẹ̀so apple
+apply - Wúlò
+appoint - Yàn
+approve - Jẹ́wọ́
+arch - Àkọmọ
+area - Agbegbe
+argue - Jíyàn
+arm - Apá
+army - Ọmọ ogun
+around - Yíka
+arrange - Ṣètò
+arrest - Dìmú
+arrive - Dé
+arrow - Ofà
+art - Ọnà
+as - Bí
+ash - Eérú
+ask - Bèèrè
+asleep - Sùn
+assist - Ràn lọ́wọ́
+at - Ní
+attack - Kọlu
+attempt - Gbìyànjú
+attend - Kẹ́yìn
+attract - Fà
+aunt - Ẹ̀gbọ́n
+author - Onkọwe
+autumn - Ìgbà ìwọ́wé
+avoid - Yẹra
+awake - Jí
+away - Sítè
+awful - Burú
+
+baby - Ọmọ oṣùwọ̀n
+back - Ẹ̀yìn
+bad - Burú
+bag - Àpò
+bake - Yan
+balance - Ìwọntunwọ̀nsi
+ball - Bọ́ọ̀lù
+banana - Ọ̀gẹ̀dẹ̀
+band - Ẹgbẹ́
+bank - Ìfipamọ́
+bar - Ìdínà
+bare - Fẹ́lẹ́
+bargain - Sòwò
+bark - gbọ́ (aja)
+base - Ipilẹ̀
+basket - Agbọ̀n
+bat - Adán
+bath - Ìwẹ̀
+battle - Ìjà
+be - (Copula: jẹ́, wà)
+beach - Etíkun
+bean - Ẹ̀wà
+bear (carry) - Gbé
+bear (animal) - Ẹranko bear
+beat - Lu
+beautiful - Ẹwà
+because - Nítorí
+become - Di
+bed - Ibùsùn
+bee - Oyìn
+before - Ṣáájú
+beg - Tọrọ
+begin - Bẹ̀rẹ̀
+behave - Hùwà
+behind - Ẹ̀yìn
+believe - Gbà gbọ́
+bell - Ago
+below - Lábẹ́
+belt - Bèltì
+bend - Tẹ
+beneath - Lábẹ́
+berry - Ẹso
+beside - Lẹ́bàá
+best - Dídára jù
+betray - Ṣẹlẹ̀si
+between - Láàárín
+big - Nlá
+bird - Ẹyẹ
+birth - Ìbí
+bit - Díẹ̀
+bite - Gún
+bitter - Kórò
+black - Dúdú
+blame - Fi ẹ̀sùn sí
+blank - Ofifo
+bleed - Ṣan ẹ̀jẹ̀
+blind - Afọ́
+block - Dè
+blood - Ẹ̀jẹ̀
+blow - fẹ́
+blue - Bulu
+board - Pátákó
+boat - Ọkọ̀ ojú omi
+body - Ara
+boil - Hihó
+bone - Egungun
+book - Ìwé
+border - Ààlà
+born - Bí
+borrow - Yá
+both - Méjèèjì
+bottle - Igó
+bottom - Isalẹ̀
+bowl - Ifọ́
+box - Àpótí
+boy - Ọkùnrin ọ̀dọ́
+branch - Ẹ̀ka
+brave - Akọni
+bread - Búrẹ́di
+break - Fọ
+breakfast - Ìrẹsún
+breath - Ẹ̀mí
+bribe - Ẹ̀bùn ìtẹ́lọ́rùn
+bridge - Afárá
+bright - Imólẹ̀
+bring - Mú wá
+broad - Fẹrẹ
+brother - Ẹ̀gbọ́n
+brown - Búrọ́nù
+brush - Brọ́ọ̀si
+build - Kọ́
+burn - Jóná
+burst - Fọ́
+bury - Sin
+bus - Bọ́ọ̀sì
+bush - Igbo
+business - Iṣẹ́ owo
+busy - Ṣiṣẹ́
+but - Ṣugbọn
+butter - Bọ́tà
+buy - Ra
+by - Fún
+
+cake - Kéèkì
+call - Pè
+calm - Ìtura
+camel - Rákunmi
+camera - Kámẹ́rà
+camp - Agọ
+can (be able) - Lè
+can (tin) - Àga
+cancel - Fagilẹ
+candle - Abẹ́là
+cap - Fìlà
+car - Ọkọ̀ ayọ́kẹ́lẹ́
+card - Káàdì
+care - Ìtọ́jú
+careful - Fara balẹ̀
+carry - Gbé
+cart - Ọkọ̀ ìkẹ́rẹ
+case - Ọ̀ràn
+cat - Ọlọ́gọ̀n
+catch - Mú
+cause - Fà
+cave - Iho apata
+celebrate - Ṣe ayẹyẹ
+center - Arín
+century - Ọ̀rúndún
+certain - Dájú
+chain - Ṣẹ̀kẹ̀
+chair - Àga
+chance - Anfaani
+change - Yípadà
+charge - Gbèsè
+chase - Lè lé
+cheap - Wúwo
+cheat - Jẹ́bú
+check - Ṣàyẹ̀wò
+cheer - Dùn
+cheese - Wàrà
+chief - Ọba
+child - Ọmọ
+choose - Yàn
+church - Ṣọ́ọ̀ṣì
+circle - Obìrìkiti
+city - Ìlú
+claim - Beere
+clap - Pàṣẹ
+class - Ẹ̀ka
+clean - Mọ́
+clear - Fẹ́
+climb - Gùn
+clock - Aago
+close - Pẹ̀
+cloth - Aṣọ
+cloud - Òkurù
+club - Kúlúbù
+coach - Akóni
+coal - Edu
+coast - Etíkun
+coat - Kóòtù
+coffee - Kọfí
+coin - Owó wúrà
+cold - Tutù
+collar - Kọ́lá
+collect - Kójọ
+colony - Agbègbè
+color - Àwọ̀
+comb - Ìyẹ̀
+come - Wá
+comfort - Itunu
+command - Àṣẹ
+common - Wọ́pọ̀
+company - Ilé iṣẹ́
+compare - Fíwé
+compete - Díje
+complain - Kọ̀
+complete - Pípé
+condition - Ọ̀nà
+confess - Jẹ́wọ́
+confuse - Ṣòkùnkùn
+congratulate - Kí
+connect - Sọ pọ̀
+consider - Rònú
+contain - Lọ́nà
+continue - Tẹ̀síwájú
+control - Ṣàkóso
+cook - Dín
+cool - Tutù
+copper - Bàbà
+copy - Kọ́kọ́
+corn - Àgbàdo
+corner - Igun
+correct - Tọ́
+cost - Iye owó
+cotton - Owu
+cough - Ikọ́
+count - Ka
+country - Orílẹ̀-èdè
+courage - Igboya
+course - Ìlànà
+court - Ẹ̀kọ̀
+cover - Ìdérí
+cow - Màálúù
+crash - Fọ́
+crazy - Wèrè
+cream - Kírììmù
+create - Ṣẹ̀dá
+creep - Rín
+crime - Ẹ̀ṣẹ̀
+cross - Kọja
+crowd - Ìjọ ènìyàn
+cruel - Aláilẹ́ṣẹ́
+crush - Rẹ
+cry - Kẹ́
+cup - Ife
+cure - Wo
+curl - Tẹ
+curse - Èpè
+curtain - Àṣìkò
+curve - Tẹ̀
+custom - Àṣà
+cut - Gé
+
+damage - Bàjẹ́
+damp - Rẹ́rẹ́
+dance - Jó
+danger - Ewu
+dare - Dáyè
+dark - Dúdú
+date (fruit) - Dáàtì
+date (day) - Ọjọ́
+daughter - Ọmọbìnrin
+day - Ọjọ́
+dead - Kú
+deaf - Etí
+deal - Jáde
+dear - Olólùfẹ
+death - Ikú
+debt - Gbèsè
+decide - Pinnu
+declare - Jẹ́rìí
+decorate - Ṣe ohun òṣè
+deep - Jin
+defeat - Borí
+defend - Dabobo
+delay - Dì
+delicate - Lílẹ
+deliver - Entrust
+demand - Beere
+dentist - Oníṣègùn eyín
+deny - Sẹ́
+depart - Lọ
+depend - Gbẹ́kẹ̀lé
+depth - Ìjìnlẹ̀
+describe - Ṣàpèjúwe
+desert - Aginjù
+deserve - Yẹ
+desire - Fẹ́
+desk - Tábìlì
+destroy - Parun
+detail - Ìṣọ̀rí
+develop - Ṣe agbekale
+devil - Èṣù
+diamond - Dájímọ̀ndì
+die - Kú
+differ - Yatọ̀
+difficult - Ṣòro
+dig - Gbẹ
+dinner - Onje alẹ
+direct - Tọ
+dirt - Idọ́tí
+disagree - Yàtọ̀
+disappear - Parẹ
+discover - Ṣàwárí
+discuss - Jíròrò
+disease - Àrùn
+disgust - Ìkórìíra
+dish - Awo
+dismiss - Kúrò
+display - Fihàn
+distance - Ìjìnnà
+ditch - Iho
+dive - Wẹ́
+divide - Pin
+do - Ṣe
+doctor - Dókítà
+dog - Ajá
+door - Ilẹ̀kùn
+double - Ìlọ́pọ̀ méjì
+doubt - Ṣàníyàn
+down - Isalẹ̀
+dozen - Dọ́sínù
+draw - Yà
+dream - Alá
+dress - Aṣọ
+drink - Mu
+drive - Wà
+drop - Dà
+dry - Gbẹ́
+duck - Pẹ́pẹ́yẹ
+dull - Gọ́ngọ́
+during - Láàárín
+dust - Èérú
+duty - Ojúṣe
+
+each - Kọ̀ọ̀kan
+eager - Nitara
+ear - Etí
+early - Kíákíá
+earn - Já
+earth - Ayé
+east - Ìlà oòrùn
+easy - Rọrùn
+eat - Je
+edge - Etí
+educate - Kọ́
+effect - Abajade
+egg - Ẹyin
+either - Tabi
+elastic - Alásiki
+elder - Àgbà
+electric - Itanna
+elephant - Erin
+else - Mìíràn
+empty - Ofofo
+end - Òpin
+enemy - Òtá
+engine - Ẹ̀ńjìnì
+enjoy - Gbadun
+enough - Tó
+enter - Wọlé
+entire - Gbogbo
+equal - Ìdọ́gba
+escape - Sá
+especially - Pàtàkì
+even - Pẹ́
+evening - Ìrọ̀lẹ́
+event - Ìṣẹ̀lẹ̀
+ever - Lailai
+every - Gbogbo
+exact - Pàtó
+example - Àpẹẹrẹ
+except - Ayafi
+exchange - Pàdé
+excite - Gbé láyọ
+excuse - Dáríjì
+exercise - Ìdánwò
+exist - Wà
+expand - Fẹ́
+expect - Retí
+expensive - Owó
+experience - Iriri
+explain - Ṣalaye
+explode - Bú
+extend - Fẹ́
+eye - Ojú
+
+face - Ojú
+fact - Òtítọ́
+factory - Ilé iṣẹ́
+fail - Kù
+faint - Ríriba
+fair - Deede
+faith - Ìgbàgbọ́
+fall - Subu
+false - Irọ
+family - Ẹbí
+famous - Gbajúmọ̀
+far - Jìnnà
+farm - Oko
+fast - Yára
+fat - Sanra
+father - Bàbá
+fault - Àṣìṣe
+fear - Ẹ̀rù
+feather - Ìyẹ́
+feeble - Aláìlera
+feed - Bọ
+feel - Mọ̀
+female - Obìnrin
+fence - Odi
+fertile - Olórí
+few - Díẹ̀
+field - Pápá
+fierce - Kikarara
+fight - Ijà
+fill - Kun
+film - Firimu
+find - Wá
+fine - Dára
+finger - Ika ọwọ
+finish - Pari
+fire - Iná
+first - Àkọ́kọ́
+fish - Ẹja
+fit - Yẹ
+five - Márùn-ún
+fix - Túnṣe
+flag - Àsìá
+flat - Pẹtẹlẹ
+flavor - Òróró
+flesh - Ẹran
+float - Fọ́
+flood - Ikomi
+floor - Ilẹ̀
+flow - Ṣàn
+flower - Òdòdó
+fly (insect) - Eṣinṣin
+fly (action) - Fò
+fold - Pọ́
+follow - Tẹ̀ lé
+food - Oúnjẹ
+fool - Gọ́
+foot - Ẹsẹ̀
+for - Fún
+forbid - Kò
+force - Agbára
+foreign - Òkèèrè
+forest - Igbo
+forget - Gbàgbé
+forgive - Dáríjì
+fork - Fọ́ọ̀kù
+form - Fọ́ọ̀mu
+fort - Ilé-iṣọ́
+forward - Sìwájú
+fountain - Isọnmi
+four - Mẹ́rin
+frame - Ìṣelọ́pọ̀
+free - Òfẹ́
+frequent - Lọ́pọ̀lọpọ
+fresh - Tuntun
+friend - Ọrẹ́
+frighten - Bẹ̀rù
+from - Láti
+front - Iwájú
+fruit - Ẹso
+full - Kún
+fun - Erin
+funny - Làlà
+fur - Irun ẹranko
+furniture - Ohun ìlẹ̀kùn
+further - Sípẹ́
+
+gain - Jere
+game - Ere
+garden - Ogbà
+gate - Ẹnu-ọna
+gather - Kójọ
+general - Gbogbogbo
+generous - Onífẹ̀ẹ́
+gentle - Jọwọ
+get - Gba
+gift - Ẹ̀bùn
+girl - Ọmọbìnrin
+give - Fún
+glad - Inú dùn
+glass - Dígí
+go - Lọ
+goat - Ewúrẹ́
+god - Ọlọ́run
+gold - Wúrà
+good - Dára
+govern - Ṣàkóso
+grain - Ẹ̀ka
+grand - Nla
+grass - Koriko
+grateful - Dupe
+grave - Sá
+gray - Gréè
+grease - Ìyẹ̀
+great - Nla
+green - Awọ ewé
+grey - Gréè
+grief - Ìbànújẹ́
+grind - Lọ
+grip - Di múná
+ground - Ilẹ̀
+group - Ẹgbẹ́
+grow - Dàgba
+guard - Oluso
+guess - Gbọdọ̀
+guide - Itọ́na
+guilty - Ẹlẹ́ṣẹ
+gun - Ibon

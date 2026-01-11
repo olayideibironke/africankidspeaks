@@ -7,17 +7,17 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Animated,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Audio } from "expo-av";
 import * as speech from "expo-speech";
 
 import { colors } from "../theme";
 import Watermark from "../components/watermark";
 import { flashcards } from "../data/flashcards";
-import { getNativeAudioSource, hasNativeAudio, type AudioLang } from "../utils/nativeAudio";
 import { getLearnedSetForLang, toggleLearnedForLang } from "../utils/learned";
+import { playWordAudio, type AudioLang } from "../utils/play-word-audio";
 
 const BTN_DARK = "#000";
 const BTN_DARK_TEXT = "#fff";
@@ -37,6 +37,16 @@ function shuffle<T>(arr: T[]) {
   return a;
 }
 
+/**
+ * ✅ Prevent placeholder "word_77" from showing.
+ * - "word_77" -> "Word 77"
+ */
+function prettyWordLabel(raw: string, id: number) {
+  const s = String(raw ?? "");
+  if (/^word_\d+$/i.test(s)) return `Word ${id}`;
+  return s;
+}
+
 export default function LearnTabScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -49,16 +59,25 @@ export default function LearnTabScreen() {
   const [order, setOrder] = useState<number[]>([]);
   const [idx, setIdx] = useState(0);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  // ✅ sparkles celebration
+  const sparkleAnim = useRef(new Animated.Value(0)).current;
+
+  const runSparkles = useCallback(() => {
+    sparkleAnim.setValue(0);
+    Animated.timing(sparkleAnim, {
+      toValue: 1,
+      duration: 650,
+      useNativeDriver: true,
+    }).start(() => {
+      Animated.timing(sparkleAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [sparkleAnim]);
 
   const stopAudio = useCallback(async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-    } catch {}
     try {
       speech.stop();
     } catch {}
@@ -79,13 +98,14 @@ export default function LearnTabScreen() {
   );
 
   useEffect(() => {
-    const ids = (flashcards as any[]).map((c) => Number(c.id)).filter((n) => Number.isFinite(n));
+    const ids = (flashcards as any[])
+      .map((c) => Number(c.id))
+      .filter((n) => Number.isFinite(n));
     setOrder(shuffle(ids));
     setIdx(0);
     setRevealed(false);
   }, []);
 
-  // when lang changes: refresh learned + keep current card id if possible
   useEffect(() => {
     (async () => {
       await refreshLearned();
@@ -95,49 +115,46 @@ export default function LearnTabScreen() {
   const currentId = order[idx] ?? Number((flashcards as any[])[0]?.id ?? 1);
 
   const current = useMemo(() => {
-    const c = (flashcards as any[]).find((x) => Number(x.id) === Number(currentId));
+    const c = (flashcards as any[]).find(
+      (x) => Number(x.id) === Number(currentId)
+    );
     if (!c) return (flashcards as any[])[0];
     return c;
   }, [currentId]);
 
   const total = order.length || flashcards.length || 1;
+  const idNum = Number(current?.id ?? currentId);
 
-  const en = String(current?.en ?? "");
+  // ✅ english (never show word_77)
+  const enRaw = String(current?.en ?? "");
+  const en = useMemo(() => prettyWordLabel(enRaw, idNum), [enRaw, idNum]);
+
+  // translation for current lang
   const tr = String(current?.[lang] ?? "");
 
-  const learnedOn = learnedSet.has(Number(current?.id));
-
-  const hasNative = hasNativeAudio({ lang, en, id: Number(current?.id) });
+  const learnedOn = learnedSet.has(idNum);
 
   const play = useCallback(async () => {
     await stopAudio();
 
-    const id = Number(current?.id);
-    const src = getNativeAudioSource({ lang, en, id });
+    // If revealed, user expects to hear translation; otherwise English.
+    const text = revealed ? tr || en : en;
+    const clean = String(text || "").trim();
+    if (!clean) return;
 
-    // 1) native audio
-    if (src) {
-      try {
-        const s = new Audio.Sound();
-        soundRef.current = s;
-        await s.loadAsync(src as any, { shouldPlay: true });
-        return;
-      } catch {
-        await stopAudio();
-      }
-    }
+    const ttsLang =
+      lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG";
 
-    // 2) TTS fallback
-    const text = revealed ? (tr || en) : en;
     const rate = lang === "pg" ? 0.95 : 0.85;
 
-    try {
-      speech.speak(text, {
-        language: lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG",
-        rate,
-      });
-    } catch {}
-  }, [stopAudio, current, lang, en, tr, revealed]);
+    await playWordAudio({
+      lang,
+      id: idNum,
+      ttsText: clean,
+      ttsLang,
+      rate,
+    });
+  }, [stopAudio, revealed, tr, en, lang, idNum]);
 
   const next = useCallback(() => {
     setIdx((v) => {
@@ -156,18 +173,24 @@ export default function LearnTabScreen() {
   }, [total]);
 
   const reshuffle = useCallback(() => {
-    const ids = (flashcards as any[]).map((c) => Number(c.id)).filter((n) => Number.isFinite(n));
+    const ids = (flashcards as any[])
+      .map((c) => Number(c.id))
+      .filter((n) => Number.isFinite(n));
     setOrder(shuffle(ids));
     setIdx(0);
     setRevealed(false);
     Alert.alert("Shuffled", "New practice order.");
   }, []);
 
+  // ✅ sparkles only when marking learned ON
   const toggleLearned = useCallback(async () => {
-    const id = Number(current?.id);
-    const set = await toggleLearnedForLang(lang, id);
+    const wasLearned = learnedSet.has(idNum);
+
+    const set = await toggleLearnedForLang(lang, idNum);
     setLearnedSet(new Set(set));
-  }, [current, lang]);
+
+    if (!wasLearned) runSparkles();
+  }, [lang, idNum, learnedSet, runSparkles]);
 
   const openWords = () => router.push({ pathname: "/words", params: { lang } });
 
@@ -176,6 +199,27 @@ export default function LearnTabScreen() {
       <View style={styles.watermarkWrap} pointerEvents="none">
         <Watermark />
       </View>
+
+      {/* ✅ Sparkles overlay */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.sparkles,
+          {
+            opacity: sparkleAnim,
+            transform: [
+              {
+                scale: sparkleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.7, 1.2],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.sparkleText}>✨✨✨</Text>
+      </Animated.View>
 
       <ScrollView
         contentContainerStyle={[
@@ -188,8 +232,7 @@ export default function LearnTabScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.h1}>Learn</Text>
             <Text style={styles.sub}>
-              {titleForLang(lang)} • Card {Math.min(idx + 1, total)}/{total} •{" "}
-              {hasNative ? "Native audio" : "TTS fallback"}
+              {titleForLang(lang)} • Card {Math.min(idx + 1, total)}/{total}
             </Text>
           </View>
         </View>
@@ -224,27 +267,14 @@ export default function LearnTabScreen() {
             <Text style={styles.hidden}>Tap “Reveal” to show translation</Text>
           )}
 
-          <View style={styles.badgesRow}>
-            {hasNative ? (
-              <View style={[styles.badge, styles.badgeOk]}>
-                <Text style={styles.badgeText}>Audio</Text>
-              </View>
-            ) : (
-              <View style={[styles.badge, styles.badgeMissing]}>
-                <Text style={styles.badgeText}>Missing</Text>
-              </View>
-            )}
-
-            {learnedOn ? (
-              <View style={[styles.badge, styles.badgeLearned]}>
-                <Text style={styles.badgeText}>Learned</Text>
-              </View>
-            ) : null}
-          </View>
-
           <View style={styles.actionsRow}>
-            <Pressable onPress={() => setRevealed((v) => !v)} style={styles.secondaryBtn}>
-              <Text style={styles.secondaryText}>{revealed ? "Hide" : "Reveal"}</Text>
+            <Pressable
+              onPress={() => setRevealed((v) => !v)}
+              style={styles.secondaryBtn}
+            >
+              <Text style={styles.secondaryText}>
+                {revealed ? "Hide" : "Reveal"}
+              </Text>
             </Pressable>
 
             <Pressable onPress={play} style={styles.primaryBtn}>
@@ -291,8 +321,25 @@ export default function LearnTabScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  watermarkWrap: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 0 },
+  watermarkWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
   container: { padding: 16, zIndex: 1 },
+
+  sparkles: {
+    position: "absolute",
+    top: 90,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 3,
+  },
+  sparkleText: { fontSize: 26 },
 
   headerRow: { flexDirection: "row", alignItems: "center" },
   h1: { fontSize: 26, fontWeight: "900", color: colors.text },
@@ -304,31 +351,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: "rgba(0,0,0,0.10)",
+    backgroundColor: "#fff",
   },
-  pillOn: { borderColor: colors.primary, backgroundColor: colors.background },
+  pillOn: { borderColor: colors.text, backgroundColor: "#f3f3f3" },
   pillText: { color: colors.muted, fontWeight: "900" },
-  pillTextOn: { color: colors.primary },
+  pillTextOn: { color: colors.text },
 
   card: {
     marginTop: 16,
-    backgroundColor: colors.card,
+    backgroundColor: "#fff",
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "rgba(0,0,0,0.10)",
   },
   en: { color: colors.text, fontSize: 22, fontWeight: "900" },
   tr: { color: colors.text, fontSize: 18, fontWeight: "900" },
   hidden: { color: colors.muted, fontWeight: "800" },
-
-  badgesRow: { marginTop: 12, flexDirection: "row", gap: 8 as any, flexWrap: "wrap" },
-  badge: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
-  badgeText: { fontWeight: "900", fontSize: 11, color: colors.text },
-  badgeMissing: { borderColor: "#d00", backgroundColor: "transparent" },
-  badgeOk: { borderColor: colors.primary, backgroundColor: "transparent" },
-  badgeLearned: { borderColor: colors.border, backgroundColor: colors.background },
 
   actionsRow: { marginTop: 12, flexDirection: "row", gap: 10 as any },
 
@@ -343,7 +383,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: BTN_DARK_TEXT, fontWeight: "900" },
-  primarySub: { marginTop: 2, color: BTN_DARK_TEXT, opacity: 0.75, fontSize: 12, fontWeight: "700" },
+  primarySub: {
+    marginTop: 2,
+    color: BTN_DARK_TEXT,
+    opacity: 0.75,
+    fontSize: 12,
+    fontWeight: "700",
+  },
 
   secondaryBtn: {
     width: 120,
@@ -351,8 +397,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
+    borderColor: "rgba(0,0,0,0.10)",
+    backgroundColor: "#fafafa",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -364,7 +410,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "rgba(0,0,0,0.10)",
     backgroundColor: "transparent",
   },
   navText: { color: colors.text, fontWeight: "900" },
@@ -375,12 +421,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "rgba(0,0,0,0.10)",
     backgroundColor: "transparent",
   },
-  learnBtnOn: { borderColor: colors.primary, backgroundColor: colors.background },
+  learnBtnOn: { borderColor: colors.accent, backgroundColor: "#fffaf0" },
   learnText: { color: colors.text, fontWeight: "900" },
-  learnTextOn: { color: colors.primary },
+  learnTextOn: { color: colors.text },
 
   ghostBtn: {
     width: 120,
@@ -388,8 +434,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: "rgba(0,0,0,0.10)",
+    backgroundColor: "#fafafa",
   },
   ghostText: { color: colors.text, fontWeight: "900" },
 
@@ -403,5 +449,11 @@ const styles = StyleSheet.create({
     borderColor: BTN_DARK,
   },
   darkText: { color: BTN_DARK_TEXT, fontWeight: "900", fontSize: 15 },
-  darkSub: { marginTop: 3, color: BTN_DARK_TEXT, opacity: 0.85, fontSize: 12, fontWeight: "800" },
+  darkSub: {
+    marginTop: 3,
+    color: BTN_DARK_TEXT,
+    opacity: 0.85,
+    fontSize: 12,
+    fontWeight: "800",
+  },
 });

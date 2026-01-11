@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "africankidspeaks",
+    "name": "AfricanKidSpeaks",
     "slug": "africankidspeaks",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "africankidspeaks",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -13,18 +14,39 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.africankidspeaks"
+      "bundleIdentifier": "com.anonymous.africankidspeaks",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.anonymous.africankidspeaks",
+      "versionCode": 7,
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_CONTACTS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "package": "com.anonymous.africankidspeaks"
+      }
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "plugins": ["expo-router"]
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "router": {
+        "origin": "africankidspeaks://"
+      },
+      "eas": {
+        "projectId": "de71552c-36f8-4838-8d4a-45ffa4ab934e"
+      }
+    }
   }
 }

@@ -9,7 +9,6 @@ import {
   ScrollView,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Audio } from "expo-av";
 import * as speech from "expo-speech";
 import * as haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -19,13 +18,18 @@ import { flashcards } from "../data/flashcards";
 import ParentGateModal from "../components/parentgate.modal";
 import Watermark from "../components/watermark";
 import { getsettings, type settings } from "../utils/settings";
-import { getNativeAudioSource, type AudioLang } from "../utils/nativeAudio";
+import { playWordAudio, type AudioLang } from "../utils/play-word-audio";
 
 type Mode = "sound" | "match";
 type Difficulty = "easy" | "normal" | "hard";
 
 const score_key = "games_soundquiz_score_v1";
 const streak_key = "games_soundquiz_streak_v1";
+
+// ✅ Adaptive difficulty (per lang + mode)
+const adaptive_key = (lang: AudioLang, mode: Mode) =>
+  `games_adaptive_v1_${lang}_${mode}`;
+const ADAPTIVE_WINDOW = 20;
 
 const BTN_DARK = "#000";
 const BTN_DARK_TEXT = "#fff";
@@ -62,6 +66,50 @@ function choicesCount(d: Difficulty) {
   return 3;
 }
 
+function difficultyStepUp(d: Difficulty): Difficulty {
+  if (d === "easy") return "normal";
+  if (d === "normal") return "hard";
+  return "hard";
+}
+function difficultyStepDown(d: Difficulty): Difficulty {
+  if (d === "hard") return "normal";
+  if (d === "normal") return "easy";
+  return "easy";
+}
+
+function parseBoolArray(raw: string | null): boolean[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    if (!Array.isArray(v)) return [];
+    return v.map((x) => !!x);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * ✅ Prevent placeholder strings like "word_77" from showing (UI).
+ */
+function isPlaceholderWord(raw: string) {
+  return /^word_\d+$/i.test(String(raw ?? ""));
+}
+function prettyWordLabel(raw: string, id: number) {
+  const s = String(raw ?? "");
+  if (isPlaceholderWord(s)) return `Word ${id}`;
+  return s;
+}
+
+/**
+ * ✅ Safe text for TTS fallback (NEVER speak "word_###")
+ * For sound quiz we speak the target translation (yo/ig/pg). If missing, speak a safe message.
+ */
+function safeTTSTextForSoundQuiz(tr: string, id: number) {
+  const s = String(tr ?? "").trim();
+  if (s) return s;
+  return `Audio missing ${id}`;
+}
+
 export default function GamesScreen() {
   const params = useLocalSearchParams<{ lang?: string }>();
   const initialLang = (params.lang as AudioLang) || "yo";
@@ -79,13 +127,14 @@ export default function GamesScreen() {
   const [attempts, setAttempts] = useState(0);
   const [correct, setCorrect] = useState(0);
 
-  const [questionId, setQuestionId] = useState<number>(() => flashcards[0]?.id ?? 1);
+  const [questionId, setQuestionId] = useState<number>(
+    () => (flashcards as any[])[0]?.id ?? 1
+  );
   const [choices, setChoices] = useState<any[]>([]);
   const [locked, setLocked] = useState(false);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const [recentResults, setRecentResults] = useState<boolean[]>([]);
 
-  // animations (only appear when triggered)
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const confettiAnim = useRef(new Animated.Value(0)).current;
 
@@ -95,19 +144,45 @@ export default function GamesScreen() {
   }, [params.lang]);
 
   const level = useMemo(() => computeLevelFromStreak(streak), [streak]);
-  const difficulty = useMemo(() => difficultyForLevel(level), [level]);
+  const baseDifficulty = useMemo(() => difficultyForLevel(level), [level]);
 
   const accuracy = useMemo(() => {
     if (attempts <= 0) return 0;
     return Math.round((correct / attempts) * 100);
   }, [attempts, correct]);
 
+  const recentAccuracy = useMemo(() => {
+    if (!recentResults.length) return 0;
+    const c = recentResults.filter(Boolean).length;
+    return Math.round((c / recentResults.length) * 100);
+  }, [recentResults]);
+
+  const difficulty = useMemo((): Difficulty => {
+    if (recentResults.length < 8) return baseDifficulty;
+    if (recentAccuracy >= 85) return difficultyStepUp(baseDifficulty);
+    if (recentAccuracy <= 55) return difficultyStepDown(baseDifficulty);
+    return baseDifficulty;
+  }, [baseDifficulty, recentResults.length, recentAccuracy]);
+
   const current = useMemo(() => {
-    const c = flashcards.find((x) => x.id === questionId) ?? flashcards[0];
+    const c =
+      (flashcards as any[]).find((x) => x.id === questionId) ??
+      (flashcards as any[])[0];
     return c;
   }, [questionId]);
 
-  const questionWordEn = useMemo(() => String((current as any)?.en ?? ""), [current]);
+  const currentId = Number((current as any)?.id ?? questionId);
+
+  // ✅ pretty label for the target English word (UI only)
+  const questionWordEn = useMemo(() => {
+    const raw = String((current as any)?.en ?? "");
+    return prettyWordLabel(raw, currentId);
+  }, [current, currentId]);
+
+  // ✅ target translation (what we WANT to speak in sound mode)
+  const targetTr = useMemo(() => {
+    return String((current as any)?.[lang] ?? "").trim();
+  }, [current, lang]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -118,21 +193,49 @@ export default function GamesScreen() {
     } catch {}
   }, []);
 
-  const saveStats = useCallback(async (nextScore: number, nextStreak: number) => {
+  const saveStats = useCallback(
+    async (nextScore: number, nextStreak: number) => {
+      try {
+        await AsyncStorage.setItem(score_key, String(nextScore));
+        await AsyncStorage.setItem(streak_key, String(nextStreak));
+      } catch {}
+    },
+    []
+  );
+
+  const loadAdaptive = useCallback(async (l: AudioLang, m: Mode) => {
     try {
-      await AsyncStorage.setItem(score_key, String(nextScore));
-      await AsyncStorage.setItem(streak_key, String(nextStreak));
-    } catch {}
+      const raw = await AsyncStorage.getItem(adaptive_key(l, m));
+      setRecentResults(parseBoolArray(raw).slice(-ADAPTIVE_WINDOW));
+    } catch {
+      setRecentResults([]);
+    }
   }, []);
 
+  const saveAdaptive = useCallback(
+    async (l: AudioLang, m: Mode, arr: boolean[]) => {
+      try {
+        await AsyncStorage.setItem(
+          adaptive_key(l, m),
+          JSON.stringify(arr.slice(-ADAPTIVE_WINDOW))
+        );
+      } catch {}
+    },
+    []
+  );
+
+  const pushAdaptiveResult = useCallback(
+    async (isCorrect: boolean) => {
+      setRecentResults((prev) => {
+        const next = [...prev, isCorrect].slice(-ADAPTIVE_WINDOW);
+        saveAdaptive(lang, mode, next);
+        return next;
+      });
+    },
+    [lang, mode, saveAdaptive]
+  );
+
   const stopAudio = useCallback(async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-    } catch {}
     try {
       speech.stop();
     } catch {}
@@ -140,15 +243,23 @@ export default function GamesScreen() {
 
   const primeQuestion = useCallback(() => {
     const cnt = choicesCount(difficulty);
-    const picked = pickN(flashcards, clamp(cnt, 3, flashcards.length));
+    const picked = pickN(
+      flashcards as any[],
+      clamp(cnt, 3, (flashcards as any[]).length)
+    );
     const hasCurrent = picked.some((x) => x.id === (current as any)?.id);
-    const finalChoices = hasCurrent ? picked : shuffle([current, ...picked]).slice(0, cnt);
+    const finalChoices = hasCurrent
+      ? picked
+      : shuffle([current, ...picked]).slice(0, cnt);
     setChoices(shuffle(finalChoices));
     setLocked(false);
   }, [difficulty, current]);
 
   const nextQuestion = useCallback(() => {
-    const next = flashcards[Math.floor(Math.random() * flashcards.length)];
+    const next =
+      (flashcards as any[])[
+        Math.floor(Math.random() * (flashcards as any[]).length)
+      ];
     setQuestionId(next.id);
   }, []);
 
@@ -156,6 +267,10 @@ export default function GamesScreen() {
     primeQuestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionId, lang, mode, difficulty]);
+
+  useEffect(() => {
+    loadAdaptive(lang, mode);
+  }, [lang, mode, loadAdaptive]);
 
   useFocusEffect(
     useCallback(() => {
@@ -180,8 +295,11 @@ export default function GamesScreen() {
       duration: 650,
       useNativeDriver: true,
     }).start(() => {
-      // fade out
-      Animated.timing(sparkleAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+      Animated.timing(sparkleAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
     });
   }, [sparkleAnim]);
 
@@ -192,13 +310,19 @@ export default function GamesScreen() {
       duration: 900,
       useNativeDriver: true,
     }).start(() => {
-      Animated.timing(confettiAnim, { toValue: 0, duration: 350, useNativeDriver: true }).start();
+      Animated.timing(confettiAnim, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }).start();
     });
   }, [confettiAnim]);
 
   const gated = useCallback(
     (fn: () => void) => {
-      const gateEnabled = settingsState ? !!(settingsState as any).parent_gate : true;
+      const gateEnabled = settingsState
+        ? !!(settingsState as any).parent_gate
+        : true;
       if (!gateEnabled) {
         fn();
         return;
@@ -212,33 +336,24 @@ export default function GamesScreen() {
   const playQuestionAudio = useCallback(async () => {
     await stopAudio();
 
-    const src = getNativeAudioSource({
-      lang,
-      en: questionWordEn,
-      id: (current as any)?.id,
-    });
+    const ttsText =
+      mode === "sound"
+        ? safeTTSTextForSoundQuiz(targetTr, currentId)
+        : safeTTSTextForSoundQuiz(targetTr, currentId);
 
-    if (src) {
-      try {
-        const s = new Audio.Sound();
-        soundRef.current = s;
-        await s.loadAsync(src as any, { shouldPlay: true });
-        return;
-      } catch {
-        await stopAudio();
-      }
-    }
+    const ttsLang =
+      lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG";
 
-    const t = String((current as any)?.[lang] ?? questionWordEn);
     const rate = lang === "pg" ? 0.95 : 0.85;
 
-    try {
-      speech.speak(t, {
-        language: lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG",
-        rate,
-      });
-    } catch {}
-  }, [stopAudio, lang, questionWordEn, current]);
+    await playWordAudio({
+      lang,
+      id: currentId,
+      ttsText,
+      ttsLang,
+      rate,
+    });
+  }, [stopAudio, lang, currentId, targetTr, mode]);
 
   const onPick = useCallback(
     async (picked: any) => {
@@ -249,6 +364,8 @@ export default function GamesScreen() {
 
       setAttempts((a) => a + 1);
       if (isCorrect) setCorrect((c) => c + 1);
+
+      pushAdaptiveResult(isCorrect);
 
       if (settingsState?.haptics !== false) {
         try {
@@ -268,6 +385,7 @@ export default function GamesScreen() {
         await saveStats(nextScore, nextStreak);
 
         runSparkles();
+        if (difficulty === "hard") runConfetti();
 
         const prevLevel = computeLevelFromStreak(streak);
         const nextLevel = computeLevelFromStreak(nextStreak);
@@ -281,7 +399,19 @@ export default function GamesScreen() {
         setTimeout(() => setLocked(false), 500);
       }
     },
-    [locked, current, settingsState, score, streak, saveStats, runSparkles, runConfetti, nextQuestion]
+    [
+      locked,
+      current,
+      pushAdaptiveResult,
+      settingsState,
+      score,
+      streak,
+      saveStats,
+      runSparkles,
+      runConfetti,
+      nextQuestion,
+      difficulty,
+    ]
   );
 
   const resetProgress = useCallback(async () => {
@@ -290,9 +420,20 @@ export default function GamesScreen() {
       setStreak(0);
       setAttempts(0);
       setCorrect(0);
+
+      setRecentResults([]);
+
       try {
         await AsyncStorage.setItem(score_key, "0");
         await AsyncStorage.setItem(streak_key, "0");
+
+        const langs: AudioLang[] = ["yo", "ig", "pg"];
+        const modes: Mode[] = ["sound", "match"];
+        await Promise.all(
+          langs.flatMap((l) =>
+            modes.map((m) => AsyncStorage.removeItem(adaptive_key(l, m)))
+          )
+        );
       } catch {}
     };
 
@@ -326,7 +467,6 @@ export default function GamesScreen() {
         <Watermark />
       </View>
 
-      {/* ✅ Only visible when animated */}
       <Animated.View
         pointerEvents="none"
         style={[
@@ -334,7 +474,12 @@ export default function GamesScreen() {
           {
             opacity: sparkleAnim,
             transform: [
-              { scale: sparkleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.2] }) },
+              {
+                scale: sparkleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.7, 1.2],
+                }),
+              },
             ],
           },
         ]}
@@ -349,7 +494,12 @@ export default function GamesScreen() {
           {
             opacity: confettiAnim,
             transform: [
-              { translateY: confettiAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 40] }) },
+              {
+                translateY: confettiAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 40],
+                }),
+              },
             ],
           },
         ]}
@@ -359,7 +509,9 @@ export default function GamesScreen() {
 
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.h1}>Games</Text>
-        <Text style={styles.sub}>Pick the correct word • Lang: {lang.toUpperCase()}</Text>
+        <Text style={styles.sub}>
+          Pick the correct word • Lang: {lang.toUpperCase()}
+        </Text>
 
         {LanguagePills}
 
@@ -369,10 +521,12 @@ export default function GamesScreen() {
             <Text style={styles.statLabel}>Level</Text>
             <Text style={styles.statTiny}>{difficulty.toUpperCase()}</Text>
           </View>
+
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{streak}</Text>
             <Text style={styles.statLabel}>Streak</Text>
           </View>
+
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{accuracy}%</Text>
             <Text style={styles.statLabel}>Accuracy</Text>
@@ -382,15 +536,34 @@ export default function GamesScreen() {
           </View>
         </View>
 
+        <View style={styles.adaptiveRow}>
+          <Text style={styles.adaptiveText}>
+            Adaptive:{" "}
+            <Text style={{ fontWeight: "900", color: colors.text }}>
+              {difficulty.toUpperCase()}
+            </Text>
+          </Text>
+          <Text style={styles.adaptiveText}>
+            Recent:{" "}
+            <Text style={{ fontWeight: "900", color: colors.text }}>
+              {recentResults.length ? `${recentAccuracy}%` : "—"}
+            </Text>{" "}
+            <Text style={styles.adaptiveTiny}>
+              ({recentResults.length}/{ADAPTIVE_WINDOW})
+            </Text>
+          </Text>
+        </View>
+
         <View style={styles.card}>
           <Text style={styles.label}>Question</Text>
           <Text style={styles.big}>
-            {mode === "sound" ? "Listen and pick the English word" : "Match the English word"}
+            {mode === "sound"
+              ? "Listen and pick the English word"
+              : "Match the English word"}
           </Text>
 
           <View style={{ height: 12 }} />
 
-          {/* ✅ Permanent visibility: black bg + white text */}
           <Pressable onPress={playQuestionAudio} style={styles.darkBtn}>
             <Text style={styles.darkText}>Play Sound</Text>
             <Text style={styles.darkSub}>Target: {questionWordEn}</Text>
@@ -400,10 +573,14 @@ export default function GamesScreen() {
 
           <View style={styles.choicesWrap}>
             {choices.map((c) => {
+              const id = Number((c as any)?.id ?? 0);
+              const rawEn = String((c as any)?.en ?? "");
+
               const label =
                 mode === "sound"
-                  ? String((c as any)?.en ?? "")
+                  ? prettyWordLabel(rawEn, id)
                   : String((c as any)?.[lang] ?? "");
+
               const isCorrect = c?.id === (current as any)?.id;
 
               return (
@@ -426,16 +603,22 @@ export default function GamesScreen() {
 
         <View style={styles.row}>
           <Pressable
+            disabled={locked}
             onPress={() => setMode((m) => (m === "sound" ? "match" : "sound"))}
-            style={[styles.btn, styles.btnSecondary]}
+            style={[styles.btn, styles.btnSecondary, locked && { opacity: 0.5 }]}
           >
             <Text style={styles.btnSecondaryText}>
               Mode: {mode === "sound" ? "Sound Quiz" : "Match"}
             </Text>
-            <Text style={styles.btnHint}>Tap to toggle</Text>
+            <Text style={styles.btnHint}>
+              {locked ? "Finish this question" : "Tap to toggle"}
+            </Text>
           </Pressable>
 
-          <Pressable onPress={resetProgress} style={[styles.btn, styles.btnGhost]}>
+          <Pressable
+            onPress={resetProgress}
+            style={[styles.btn, styles.btnGhost]}
+          >
             <Text style={styles.btnGhostText}>Reset</Text>
           </Pressable>
         </View>
@@ -477,8 +660,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: (colors as any).border ?? "#e5e5e5",
+    backgroundColor: (colors as any).card ?? "#f6f6f6",
   },
   pillOn: { borderColor: colors.primary, backgroundColor: colors.background },
   pillText: { color: colors.muted, fontWeight: "900" },
@@ -487,23 +670,38 @@ const styles = StyleSheet.create({
   topRow: { marginTop: 14, flexDirection: "row", gap: 10 as any },
   statBox: {
     flex: 1,
-    backgroundColor: colors.card,
+    backgroundColor: (colors as any).card ?? "#f6f6f6",
     borderRadius: 18,
     padding: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: (colors as any).border ?? "#e5e5e5",
   },
   statValue: { color: colors.text, fontWeight: "900", fontSize: 20 },
-  statLabel: { marginTop: 2, color: colors.muted, fontSize: 12, fontWeight: "800" },
+  statLabel: {
+    marginTop: 2,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
   statTiny: { marginTop: 6, color: colors.muted, fontSize: 11 },
 
+  adaptiveRow: {
+    marginTop: 10,
+    paddingHorizontal: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10 as any,
+  },
+  adaptiveText: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  adaptiveTiny: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+
   card: {
-    marginTop: 14,
-    backgroundColor: colors.card,
+    marginTop: 12,
+    backgroundColor: (colors as any).card ?? "#f6f6f6",
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: (colors as any).border ?? "#e5e5e5",
   },
   label: { color: colors.muted, fontSize: 12, fontWeight: "800" },
   big: { marginTop: 6, color: colors.text, fontSize: 16, fontWeight: "900" },
@@ -518,14 +716,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   darkText: { color: BTN_DARK_TEXT, fontWeight: "900" },
-  darkSub: { marginTop: 3, color: BTN_DARK_TEXT, opacity: 0.85, fontSize: 12, fontWeight: "800" },
+  darkSub: {
+    marginTop: 3,
+    color: BTN_DARK_TEXT,
+    opacity: 0.85,
+    fontSize: 12,
+    fontWeight: "800",
+  },
 
   btn: {
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: (colors as any).border ?? "#e5e5e5",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -541,7 +745,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: (colors as any).border ?? "#e5e5e5",
     backgroundColor: colors.background,
   },
   choiceText: { color: colors.text, fontWeight: "900", fontSize: 16 },

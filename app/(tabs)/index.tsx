@@ -1,5 +1,5 @@
 // app/(tabs)/index.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   ScrollView,
   Image,
   Alert,
+  Animated,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { colors } from "../theme";
 import Watermark from "../components/watermark";
@@ -55,6 +57,20 @@ function toLearnedLang(lang: Lang): LearnedLang {
   return lang === "yo" ? "yo" : lang === "ig" ? "ig" : "pg";
 }
 
+// ✅ milestone helper
+function hitMilestone(prevPct: number, nextPct: number) {
+  const goals = [25, 50, 75, 100];
+  for (const g of goals) {
+    if (prevPct < g && nextPct >= g) return g;
+  }
+  return null;
+}
+
+const HOME_LAST_PCT_KEY = (lang: Lang) => `home_last_pct_v1_${lang}`;
+
+// ✅ one-time "release ready" nudge
+const HOME_RELEASE_READY_SHOWN_KEY = "home_release_ready_shown_v1";
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -69,6 +85,11 @@ export default function HomeScreen() {
   // Parent gate state
   const [gateOpen, setGateOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | "reset_lang">(null);
+
+  // ✅ celebration
+  const sparkleAnim = useRef(new Animated.Value(0)).current;
+  const confettiAnim = useRef(new Animated.Value(0)).current;
+  const [milestoneHit, setMilestoneHit] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -99,14 +120,18 @@ export default function HomeScreen() {
     return learnedPg;
   }, [lang, learnedYo, learnedIg, learnedPg]);
 
-  const learnedCountSelected = useMemo(() => {
+  const countLearnedForSet = useCallback((set: Set<number>) => {
     let n = 0;
     for (const c of flashcards as any[]) {
       const id = Number(c.id);
-      if (learnedSetForSelected.has(id)) n++;
+      if (set.has(id)) n++;
     }
     return n;
-  }, [learnedSetForSelected]);
+  }, []);
+
+  const learnedCountSelected = useMemo(() => {
+    return countLearnedForSet(learnedSetForSelected);
+  }, [learnedSetForSelected, countLearnedForSet]);
 
   const learnedPctSelected = useMemo(() => {
     return totalWords > 0 ? Math.round((learnedCountSelected / totalWords) * 100) : 0;
@@ -130,13 +155,92 @@ export default function HomeScreen() {
 
   const nativeCoverage = useMemo(() => nativeCoverageFor(lang), [lang, nativeCoverageFor]);
 
-  // Learned breakdown by language (per-language sets, honest)
   const learnedCounts = useMemo(() => {
-    const yo = learnedYo.size;
-    const ig = learnedIg.size;
-    const pg = learnedPg.size;
+    const yo = countLearnedForSet(learnedYo);
+    const ig = countLearnedForSet(learnedIg);
+    const pg = countLearnedForSet(learnedPg);
     return { yo, ig, pg };
-  }, [learnedYo, learnedIg, learnedPg]);
+  }, [learnedYo, learnedIg, learnedPg, countLearnedForSet]);
+
+  const learnedPcts = useMemo(() => {
+    const yo = totalWords ? Math.round((learnedCounts.yo / totalWords) * 100) : 0;
+    const ig = totalWords ? Math.round((learnedCounts.ig / totalWords) * 100) : 0;
+    const pg = totalWords ? Math.round((learnedCounts.pg / totalWords) * 100) : 0;
+    return { yo, ig, pg };
+  }, [learnedCounts, totalWords]);
+
+  const overall = useMemo(() => {
+    const denom = totalWords * 3;
+    const num = learnedCounts.yo + learnedCounts.ig + learnedCounts.pg;
+    const pct = denom > 0 ? Math.round((num / denom) * 100) : 0;
+    return { num, denom, pct };
+  }, [learnedCounts, totalWords]);
+
+  // ✅ “Release Ready” condition (no UI layout change: just subtitle text + one-time alert)
+  const releaseReady = useMemo(() => {
+    const yo = nativeCoverageFor("yo").pct;
+    const ig = nativeCoverageFor("ig").pct;
+    const pg = nativeCoverageFor("pg").pct;
+    return totalWords >= 500 && yo === 100 && ig === 100 && pg === 100;
+  }, [nativeCoverageFor, totalWords]);
+
+  useEffect(() => {
+    (async () => {
+      if (!releaseReady) return;
+      try {
+        const shown = await AsyncStorage.getItem(HOME_RELEASE_READY_SHOWN_KEY);
+        if (shown === "1") return;
+        await AsyncStorage.setItem(HOME_RELEASE_READY_SHOWN_KEY, "1");
+        Alert.alert(
+          "Release Ready ✅",
+          "All native audio is complete for YO / IG / PG. You’re good to ship."
+        );
+      } catch {}
+    })();
+  }, [releaseReady]);
+
+  // ✅ celebration runners
+  const runSparkles = useCallback(() => {
+    sparkleAnim.setValue(0);
+    Animated.timing(sparkleAnim, {
+      toValue: 1,
+      duration: 650,
+      useNativeDriver: true,
+    }).start(() => {
+      Animated.timing(sparkleAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+    });
+  }, [sparkleAnim]);
+
+  const runConfetti = useCallback(() => {
+    confettiAnim.setValue(0);
+    Animated.timing(confettiAnim, {
+      toValue: 1,
+      duration: 900,
+      useNativeDriver: true,
+    }).start(() => {
+      Animated.timing(confettiAnim, { toValue: 0, duration: 350, useNativeDriver: true }).start();
+    });
+  }, [confettiAnim]);
+
+  // ✅ detect milestone crossing (selected language)
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HOME_LAST_PCT_KEY(lang));
+        const prev = raw ? parseInt(raw, 10) || 0 : 0;
+        const next = learnedPctSelected;
+
+        const hit = hitMilestone(prev, next);
+        if (hit) {
+          setMilestoneHit(hit);
+          runSparkles();
+          runConfetti();
+        }
+
+        await AsyncStorage.setItem(HOME_LAST_PCT_KEY(lang), String(next));
+      } catch {}
+    })();
+  }, [lang, learnedPctSelected, runSparkles, runConfetti]);
 
   const goLearn = useCallback(() => {
     router.push({ pathname: "/learn", params: { lang } });
@@ -180,7 +284,14 @@ export default function HomeScreen() {
     if (action === "reset_lang") {
       const l = toLearnedLang(lang);
       await clearLearnedForLang(l);
+
+      // reset last pct for this lang so it won't immediately celebrate
+      try {
+        await AsyncStorage.setItem(HOME_LAST_PCT_KEY(lang), "0");
+      } catch {}
+
       await refresh();
+      setMilestoneHit(null);
       Alert.alert("Reset", `${titleForLang(lang)} learned progress cleared.`);
     }
   };
@@ -191,6 +302,45 @@ export default function HomeScreen() {
       <View style={styles.watermarkWrap} pointerEvents="none">
         <Watermark />
       </View>
+
+      {/* ✅ Celebration overlays */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.sparkles,
+          {
+            opacity: sparkleAnim,
+            transform: [
+              { scale: sparkleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.2] }) },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.sparkleText}>✨✨✨</Text>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.confetti,
+          {
+            opacity: confettiAnim,
+            transform: [
+              { translateY: confettiAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 40] }) },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.confettiText}>🎉🎊🎉🎊</Text>
+      </Animated.View>
+
+      {milestoneHit ? (
+        <View pointerEvents="none" style={styles.milestoneBanner}>
+          <Text style={styles.milestoneText}>
+            {titleForLang(lang)} hit {milestoneHit}%! 🎉
+          </Text>
+        </View>
+      ) : null}
 
       {/* Parent Gate */}
       {gateOpen ? (
@@ -218,7 +368,10 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.h1}>AfricanKidSpeaks</Text>
-            <Text style={styles.sub}>Pick a language, then jump in.</Text>
+            <Text style={styles.sub}>
+              Pick a language, then jump in.
+              {releaseReady ? " • Release Ready ✅" : ""}
+            </Text>
           </View>
 
           <Image source={APP_LOGO} style={styles.logo} resizeMode="contain" />
@@ -254,7 +407,6 @@ export default function HomeScreen() {
             );
           })}
 
-          {/* Placeholder */}
           <View style={[styles.langCard, styles.langCardDisabled]}>
             <View style={styles.langRow}>
               <Text style={styles.langBadgeMuted}>+</Text>
@@ -267,7 +419,7 @@ export default function HomeScreen() {
         {/* Progress card */}
         <View style={styles.progressCard}>
           <View style={styles.progressTopRow}>
-            <Text style={styles.progressTitle}>Learning progress • {titleForLang(lang)}</Text>
+            <Text style={styles.progressTitle}>Progress summary</Text>
 
             <Pressable
               onPress={requestResetLang}
@@ -277,50 +429,81 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.progressRow}>
-            <Text style={styles.progressBig}>{learnedPctSelected}%</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.progressLabel}>
-                Learned:{" "}
-                <Text style={styles.progressStrong}>
-                  {learnedCountSelected}/{totalWords}
-                </Text>
+          <View style={styles.summaryTop}>
+            <Text style={styles.summaryLabel}>Overall (YO + IG + PG)</Text>
+            <Text style={styles.summaryValue}>
+              {overall.pct}%{" "}
+              <Text style={styles.summaryValueSub}>
+                ({overall.num}/{overall.denom})
               </Text>
-              <Text style={styles.progressSub}>
-                Next goal: <Text style={styles.progressStrong}>{goalPct}%</Text>
-              </Text>
-            </View>
+            </Text>
           </View>
 
           <View style={styles.barOuter}>
-            <View style={[styles.barInner, { width: `${clampPct(learnedPctSelected)}%` }]} />
+            <View style={[styles.barInner, { width: `${clampPct(overall.pct)}%` }]} />
           </View>
 
-          {/* Learned breakdown (now truly per-language) */}
-          <View style={styles.breakdownRow}>
+          <View style={styles.miniGrid}>
             {(
               [
-                { k: "yo" as Lang, label: "YO", v: learnedCounts.yo },
-                { k: "ig" as Lang, label: "IG", v: learnedCounts.ig },
-                { k: "pg" as Lang, label: "PG", v: learnedCounts.pg },
+                { k: "yo" as Lang, label: "YO", pct: learnedPcts.yo, count: learnedCounts.yo },
+                { k: "ig" as Lang, label: "IG", pct: learnedPcts.ig, count: learnedCounts.ig },
+                { k: "pg" as Lang, label: "PG", pct: learnedPcts.pg, count: learnedCounts.pg },
               ] as const
-            ).map(({ k, label, v }) => (
-              <View key={k} style={styles.breakBox}>
-                <Text style={styles.breakLabel}>{label} learned</Text>
-                <Text style={styles.breakValue}>{v}</Text>
-              </View>
-            ))}
+            ).map(({ k, label, pct, count }) => {
+              const active = k === lang;
+              return (
+                <View key={k} style={[styles.miniBox, active && styles.miniBoxActive]}>
+                  <View style={styles.miniTopRow}>
+                    <Text style={[styles.miniTag, active && styles.miniTagActive]}>{label}</Text>
+                    <Text style={styles.miniPct}>{pct}%</Text>
+                  </View>
+                  <Text style={styles.miniSub}>
+                    {count}/{totalWords} learned
+                  </Text>
+
+                  <View style={styles.miniBarOuter}>
+                    <View style={[styles.miniBarInner, { width: `${clampPct(pct)}%` }]} />
+                  </View>
+                </View>
+              );
+            })}
           </View>
 
-          <Pressable
-            onPress={openWordsLearned}
-            style={({ pressed }) => [styles.learnedBtn, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.learnedBtnText}>Learned Summary</Text>
-            <Text style={styles.learnedBtnSub}>Open words you marked learned • {lang.toUpperCase()}</Text>
-          </Pressable>
+          <View style={styles.focusBlock}>
+            <Text style={styles.focusTitle}>Learning progress • {titleForLang(lang)}</Text>
 
-          <Text style={styles.progressHint}>Tip: learned is now tracked per language.</Text>
+            <View style={styles.progressRow}>
+              <Text style={styles.progressBig}>{learnedPctSelected}%</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.progressLabel}>
+                  Learned:{" "}
+                  <Text style={styles.progressStrong}>
+                    {learnedCountSelected}/{totalWords}
+                  </Text>
+                </Text>
+                <Text style={styles.progressSub}>
+                  Next goal: <Text style={styles.progressStrong}>{goalPct}%</Text>
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.barOuter}>
+              <View style={[styles.barInner, { width: `${clampPct(learnedPctSelected)}%` }]} />
+            </View>
+
+            <Pressable
+              onPress={openWordsLearned}
+              style={({ pressed }) => [styles.learnedBtn, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.learnedBtnText}>Learned Summary</Text>
+              <Text style={styles.learnedBtnSub}>
+                Open words you marked learned • {lang.toUpperCase()}
+              </Text>
+            </Pressable>
+
+            <Text style={styles.progressHint}>Tip: learned is tracked per language.</Text>
+          </View>
         </View>
 
         {/* Quick stats */}
@@ -409,6 +592,41 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 0,
   },
+
+  // overlays
+  sparkles: {
+    position: "absolute",
+    top: 90,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 3,
+  },
+  sparkleText: { fontSize: 26 },
+  confetti: {
+    position: "absolute",
+    top: 50,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 4,
+  },
+  confettiText: { fontSize: 28 },
+  milestoneBanner: {
+    position: "absolute",
+    top: 18,
+    left: 16,
+    right: 16,
+    zIndex: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: "center",
+  },
+  milestoneText: { color: colors.text, fontWeight: "900" },
 
   headerRow: {
     flexDirection: "row",
@@ -507,16 +725,16 @@ const styles = StyleSheet.create({
   },
   resetLearnedText: { color: colors.text, fontWeight: "900", fontSize: 12 },
 
-  progressRow: {
-    marginTop: 10,
+  summaryTop: {
+    marginTop: 12,
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12 as any,
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 10 as any,
   },
-  progressBig: { fontSize: 34, fontWeight: "900", color: colors.text },
-  progressLabel: { color: colors.muted, fontWeight: "800" },
-  progressSub: { marginTop: 2, color: colors.muted, fontWeight: "800" },
-  progressStrong: { color: colors.text, fontWeight: "900" },
+  summaryLabel: { color: colors.muted, fontWeight: "800" },
+  summaryValue: { color: colors.text, fontWeight: "900", fontSize: 16 },
+  summaryValueSub: { color: colors.muted, fontSize: 12, fontWeight: "800" },
 
   barOuter: {
     marginTop: 10,
@@ -529,12 +747,12 @@ const styles = StyleSheet.create({
   },
   barInner: { height: "100%", backgroundColor: colors.text },
 
-  breakdownRow: {
+  miniGrid: {
     marginTop: 12,
     flexDirection: "row",
     gap: 10,
   },
-  breakBox: {
+  miniBox: {
     flex: 1,
     backgroundColor: colors.background,
     borderRadius: 14,
@@ -542,8 +760,60 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  breakLabel: { color: colors.muted, fontWeight: "800", fontSize: 12 },
-  breakValue: { marginTop: 4, color: colors.text, fontWeight: "900", fontSize: 18 },
+  miniBoxActive: {
+    borderColor: colors.text,
+  },
+  miniTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8 as any,
+  },
+  miniTag: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    color: colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+    overflow: "hidden",
+  },
+  miniTagActive: {
+    backgroundColor: colors.text,
+    color: colors.background,
+  },
+  miniPct: { color: colors.text, fontWeight: "900", fontSize: 14 },
+  miniSub: { marginTop: 4, color: colors.muted, fontWeight: "800", fontSize: 12 },
+  miniBarOuter: {
+    marginTop: 8,
+    height: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    overflow: "hidden",
+  },
+  miniBarInner: { height: "100%", backgroundColor: colors.text },
+
+  focusBlock: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  focusTitle: { fontSize: 16, fontWeight: "900", color: colors.text },
+
+  progressRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12 as any,
+  },
+  progressBig: { fontSize: 34, fontWeight: "900", color: colors.text },
+  progressLabel: { color: colors.muted, fontWeight: "800" },
+  progressSub: { marginTop: 2, color: colors.muted, fontWeight: "800" },
+  progressStrong: { color: colors.text, fontWeight: "900" },
 
   learnedBtn: {
     marginTop: 12,

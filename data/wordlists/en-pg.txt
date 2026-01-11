@@ -1,0 +1,586 @@
+a / an - One
+abandon - Leave am
+ability - Power
+able - Fit
+about - About
+above - For top
+abroad - For abroad
+absent - No dey
+accept - Collect am
+accident - Accident
+account - Account
+accuse - Blame
+ache - Pain
+achieve - Get am
+across - Cross
+act - Do
+active - Strong
+actor - Actor
+add - Add am
+address - Address
+admire - Like well-well
+admit - Confess
+adult - Big person
+advance - Forward
+advantage - Advantage
+adventure - Adventure
+advice - Advice
+afraid - Fear
+after - After
+afternoon - Afternoon
+again - Again
+against - Against
+age - Age
+ago - Before
+agree - Agree
+air - Air
+airport - Airport
+alive - Dey alive
+all - All
+allow - Allow
+almost - Almost
+alone - Alone
+along - Follow
+already - Don
+also - Also
+although - Even if
+always - Always
+amaze - Shock
+ambition - Mind
+among - For middle
+amount - How much
+amuse - Make person laugh
+ancestor - Old-old papa
+ancient - Tori way tay pass
+and - And
+anger - Anger
+angry - Vex
+animal - Animal
+announce - Tell everybody
+annoy - Vex person
+another - Another one
+answer - Answer
+ant - Ant
+anxious - Fear
+any - Any
+apart - Separate
+apology - Sorry
+appear - Show
+apple - Apple
+apply - Use am
+appoint - Choose
+approve - Okay am
+arch - Arch
+area - Area
+argue - Argue
+arm - Hand
+army - Soldiers
+around - Round about
+arrange - Arrange am
+arrest - Catch
+arrive - Reach
+arrow - Arrow
+art - Art
+as - As
+ash - Ash
+ask - Ask
+asleep - Sleep
+assist - Help
+at - For
+attack - Attack
+attempt - Try
+attend - Go
+attract - Pull
+aunt - Aunty
+author - Person wey write am
+autumn - Rainy season
+avoid - Run from
+awake - Wake up
+away - Far
+awful - Bad well-well
+
+baby - Pikin
+back - Back
+bad - Bad
+bag - Bag
+bake - Bake
+balance - Balance
+ball - Ball
+banana - Banana
+band - Group
+bank - Bank
+bar - Bar
+bare - Naked
+bargain - Bargain
+bark - Woof (dog)
+base - Bottom
+basket - Basket
+bat - Bat
+bath - Bath
+battle - War
+be - Be
+beach - Beach
+bean - Beans
+bear (carry) - Carry
+bear (animal) - Bear
+beat - Beat
+beautiful - Fine
+because - Because
+become - Become
+bed - Bed
+bee - Bee
+before - Before
+beg - Beg
+begin - Start
+behave - Behave
+behind - For back
+believe - Believe
+bell - Bell
+below - Down
+belt - Belt
+bend - Bend
+beneath - Under
+berry - Small fruit
+beside - For side
+best - The best
+betray - Sell person
+between - For middle
+big - Big
+bird - Bird
+birth - Born
+bit - Small-small
+bite - Bite
+bitter - Bitter
+black - Black
+blame - Blame
+blank - Empty
+bleed - Blood dey come out
+blind - Blind
+block - Block
+blood - Blood
+blow - Blow
+blue - Blue
+board - Wood
+boat - Boat
+body - Body
+boil - Boil
+bone - Bone
+book - Book
+border - Border
+born - Born
+borrow - Borrow
+both - The two
+bottle - Bottle
+bottom - Bottom
+bowl - Bowl
+box - Box
+boy - Boy
+branch - Branch
+brave - No dey fear
+bread - Bread
+break - Break
+breakfast - Morning food
+breath - Breath
+bribe - Bribe
+bridge - Bridge
+bright - Bright
+bring - Bring
+broad - Wide
+brother - Brother
+brown - Brown
+brush - Brush
+build - Build
+burn - Burn
+burst - Burst
+bury - Bury
+bus - Bus
+bush - Bush
+business - Business
+busy - Dey busy
+but - But
+butter - Butter
+buy - Buy
+by - By
+
+cake - Cake
+call - Call
+calm - Calm
+camel - Camel
+camera - Camera
+camp - Camp
+can (be able) - Fit
+can (tin) - Tin
+cancel - Cancel
+candle - Candle
+cap - Cap
+car - Motor
+card - Card
+care - Care
+careful - Look well
+carry - Carry
+cart - Cart
+case - Case
+cat - Cat
+catch - Catch
+cause - Cause
+cave - Cave
+celebrate - Celebrate
+center - Center
+century - Hundred years
+certain - Sure
+chain - Chain
+chair - Chair
+chance - Chance
+change - Change
+charge - Charge
+chase - Chase
+cheap - Cheap
+cheat - Cheat
+check - Check
+cheer - Happy
+cheese - Cheese
+chief - Oga
+child - Pikin
+choose - Choose
+church - Church
+circle - Circle
+city - City
+claim - Claim
+clap - Clap
+class - Class
+clean - Clean
+clear - Clear
+climb - Climb
+clock - Clock
+close - Close
+cloth - Cloth
+cloud - Cloud
+club - Club
+coach - Coach
+coal - Coal
+coast - Coast
+coat - Coat
+coffee - Coffee
+coin - Coin
+cold - Cold
+collar - Collar
+collect - Gather
+colony - Colony
+color - Color
+comb - Comb
+come - Come
+comfort - Comfort
+command - Command
+common - Common
+company - Company
+compare - Compare
+compete - Compete
+complain - Complain
+complete - Finish
+condition - Condition
+confess - Confess
+confuse - Confuse
+congratulate - Congratulate
+connect - Connect
+consider - Think about am
+contain - Get inside
+continue - Continue
+control - Control
+cook - Cook
+cool - Cool
+copper - Copper
+copy - Copy
+corn - Corn
+corner - Corner
+correct - Correct
+cost - Cost
+cotton - Cotton
+cough - Cough
+count - Count
+country - Country
+courage - Strong heart
+course - Course
+court - Court
+cover - Cover
+cow - Cow
+crash - Crash
+crazy - Crazy
+cream - Cream
+create - Create
+creep - Crawl
+crime - Crime
+cross - Cross
+crowd - Crowd
+cruel - Wicked
+crush - Crush
+cry - Cry
+cup - Cup
+cure - Cure
+curl - Curl
+curse - Curse
+curtain - Curtain
+curve - Bend
+custom - Custom
+cut - Cut
+
+damage - Spoil
+damp - Damp
+dance - Dance
+danger - Danger
+dare - Dare
+dark - Dark
+date (fruit) - Date
+date (day) - Date
+daughter - Girl pikin
+day - Day
+dead - Don die
+deaf - Deaf
+deal - Deal
+dear - My dear
+death - Death
+debt - Debt
+decide - Decide
+declare - Declare
+decorate - Decorate
+deep - Deep
+defeat - Beat am
+defend - Defend
+delay - Delay
+delicate - Delicate
+deliver - Deliver
+demand - Demand
+dentist - Teeth doctor
+deny - Deny
+depart - Leave
+depend - Depend
+depth - Depth
+describe - Describe
+desert - Desert
+deserve - Deserve
+desire - Want well-well
+desk - Desk
+destroy - Destroy
+detail - Detail
+develop - Develop
+devil - Devil
+diamond - Diamond
+die - Die
+differ - Different
+difficult - Hard
+dig - Dig
+dinner - Night food
+direct - Direct
+dirt - Dirty
+disagree - No agree
+disappear - Disappear
+discover - Find out
+discuss - Discuss
+disease - Sickness
+disgust - Disgust
+dish - Plate
+dismiss - Sack
+display - Show
+distance - Far place
+ditch - Ditch
+dive - Dive
+divide - Share
+do - Do
+doctor - Doctor
+dog - Dog
+door - Door
+double - Double
+doubt - Doubt
+down - Down
+dozen - One dozen
+draw - Draw
+dream - Dream
+dress - Dress
+drink - Drink
+drive - Drive
+drop - Drop
+dry - Dry
+duck - Duck
+dull - Dull
+during - For the time
+dust - Dust
+duty - Work
+
+each - Each
+eager - Eager
+ear - Ear
+early - Early
+earn - Earn
+earth - Earth
+east - East
+easy - Easy
+eat - Chop
+edge - Edge
+educate - Go school
+effect - Effect
+egg - Egg
+either - Either
+elastic - Stretch
+elder - Big person
+electric - Light
+elephant - Elephant
+else - Another thing
+empty - Empty
+end - End
+enemy - Enemy
+engine - Engine
+enjoy - Enjoy
+enough - Enough
+enter - Enter
+entire - Whole
+equal - Equal
+escape - Run away
+especially - Especially
+even - Even
+evening - Evening
+event - Event
+ever - Ever
+every - Every
+exact - Exact
+example - Example
+except - Except
+exchange - Exchange
+excite - Make person happy
+excuse - Sorry
+exercise - Exercise
+exist - Dey
+expand - Expand
+expect - Expect
+expensive - Costly
+experience - Experience
+explain - Explain
+explode - Explode
+extend - Extend
+eye - Eye
+
+face - Face
+fact - Fact
+factory - Factory
+fail - Fail
+faint - Faint
+fair - Fair
+faith - Faith
+fall - Fall
+false - Lie
+family - Family
+famous - Popular
+far - Far
+farm - Farm
+fast - Fast
+fat - Fat
+father - Papa
+fault - Fault
+fear - Fear
+feather - Feather
+feeble - Weak
+feed - Feed
+feel - Feel
+female - Woman
+fence - Fence
+fertile - Fertile
+few - Few
+field - Field
+fierce - Fierce
+fight - Fight
+fill - Fill
+film - Film
+find - See
+fine - Fine
+finger - Finger
+finish - Finish
+fire - Fire
+first - First
+fish - Fish
+fit - Fit
+five - Five
+fix - Fix
+flag - Flag
+flat - Flat
+flavor - Taste
+flesh - Meat
+float - Float
+flood - Flood
+floor - Floor
+flow - Flow
+flower - Flower
+fly (insect) - Fly
+fly (action) - Fly
+fold - Fold
+follow - Follow
+food - Food
+fool - Fool
+foot - Foot
+for - For
+forbid - Forbid
+force - Force
+foreign - Oyinbo
+forest - Bush
+forget - Forget
+forgive - Forgive
+fork - Fork
+form - Form
+fort - Fort
+forward - Forward
+fountain - Fountain
+four - Four
+frame - Frame
+free - Free
+frequent - Often
+fresh - Fresh
+friend - Friend
+frighten - Fear
+from - From
+front - Front
+fruit - Fruit
+full - Full
+fun - Fun
+funny - Funny
+fur - Fur
+furniture - Furniture
+further - Further
+
+gain - Gain
+game - Game
+garden - Garden
+gate - Gate
+gather - Gather
+general - General
+generous - Generous
+gentle - Gentle
+get - Get
+gift - Gift
+girl - Girl
+give - Give
+glad - Happy
+glass - Glass
+go - Go
+goat - Goat
+god - God
+gold - Gold
+good - Good
+govern - Govern
+grain - Grain
+grand - Grand
+grass - Grass
+grateful - Thank you
+grave - Grave
+gray - Gray
+grease - Grease
+great - Great
+green - Green
+grey - Grey
+grief - Sad
+grind - Grind
+grip - Hold
+ground - Ground
+group - Group
+grow - Grow
+guard - Guard
+guess - Guess
+guide - Guide
+guilty - Guilty
+gun - Gun
