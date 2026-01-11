@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.anonymous.africankidspeaks",
-      "versionCode": 7,
+      "versionCode": 9,
       "permissions": [],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
