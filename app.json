@@ -2,7 +2,7 @@
   "expo": {
     "name": "AfricanKidSpeaks",
     "slug": "africankidspeaks",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,11 +15,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.africankidspeaks",
-      "buildNumber": "1"
+      "buildNumber": "2",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.anonymous.africankidspeaks",
-      "versionCode": 9,
+      "versionCode": 10,
       "permissions": [],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",

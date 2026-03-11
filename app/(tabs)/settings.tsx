@@ -1,19 +1,21 @@
-// app/(tabs)/settings.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as speech from "expo-speech";
 
-import { colors } from "../theme";
-import Watermark from "../components/watermark";
 import ParentGateModal from "../components/parentgate.modal";
-
 import { flashcards } from "../data/flashcards";
 import { audiomap } from "../data/audiomap.generated";
-import { getsettings, updatesettings, type settings, type AudioLang } from "../utils/settings";
+import {
+  getsettings,
+  updatesettings,
+  type settings,
+  type AudioLang,
+} from "../utils/settings";
 import { clearLearned } from "../utils/learned";
 
 type Lang = "yo" | "ig" | "pg";
+type GateAction = "reset_session" | "factory_reset";
 
 const keys_to_clear_session = [
   "learn_practiced_keys_v1",
@@ -23,7 +25,6 @@ const keys_to_clear_session = [
   "games_correct_v1",
 ];
 
-// Home milestone last-pct keys (per lang)
 const HOME_LAST_PCT_KEY = (lang: Lang) => `home_last_pct_v1_${lang}`;
 
 function clamp(n: number, min: number, max: number) {
@@ -36,13 +37,17 @@ function titleForLang(lang: Lang) {
   return "Pidgin";
 }
 
+function shortForLang(lang: Lang) {
+  if (lang === "yo") return "YO";
+  if (lang === "ig") return "IG";
+  return "PG";
+}
+
 function speechLocale(lang: AudioLang) {
   if (lang === "yo") return "yo-NG";
   if (lang === "ig") return "ig-NG";
   return "en-NG";
 }
-
-type GateAction = "reset_session" | "factory_reset";
 
 export default function SettingsScreen() {
   const mountedRef = useRef(true);
@@ -74,16 +79,6 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
-
-  const openGateFor = (action: GateAction) => {
-    setPendingAction(action);
-    setGateVisible(true);
-  };
-
-  const closeGate = () => {
-    setGateVisible(false);
-    setPendingAction(null);
-  };
 
   const savePatch = useCallback(
     async (patch: Partial<settings>) => {
@@ -123,10 +118,8 @@ export default function SettingsScreen() {
     } catch {}
   }, [appSettings]);
 
-  // ✅ reset helpers
   const resetSessionOnly = useCallback(async () => {
     await AsyncStorage.multiRemove(keys_to_clear_session);
-    // also clear home pct keys so milestones don’t instantly retrigger weirdly after session reset
     await AsyncStorage.multiRemove([
       HOME_LAST_PCT_KEY("yo"),
       HOME_LAST_PCT_KEY("ig"),
@@ -135,21 +128,25 @@ export default function SettingsScreen() {
   }, []);
 
   const factoryResetAll = useCallback(async () => {
-    // clears learned sets (yo/ig/pg) + legacy key
     await clearLearned();
-
-    // clears session keys + home pct keys
     await resetSessionOnly();
   }, [resetSessionOnly]);
 
+  const openGateFor = (action: GateAction) => {
+    setPendingAction(action);
+    setGateVisible(true);
+  };
+
+  const closeGate = () => {
+    setGateVisible(false);
+    setPendingAction(null);
+  };
+
   const onGatePassed = useCallback(async () => {
     const action = pendingAction;
-
-    // ✅ close modal FIRST (prevents crash)
     closeGate();
 
-    if (!action) return;
-    if (isResetting) return;
+    if (!action || isResetting) return;
 
     setIsResetting(true);
     try {
@@ -170,10 +167,6 @@ export default function SettingsScreen() {
     }
   }, [pendingAction, isResetting, resetSessionOnly, factoryResetAll]);
 
-  // -------------------------
-  // ✅ AUDIO COVERAGE (audiomap.generated format)
-  // keys like: "yo/1"
-  // -------------------------
   const totalWords = flashcards.length;
 
   const coverage = useMemo(() => {
@@ -200,12 +193,10 @@ export default function SettingsScreen() {
       }
 
       const pct = totalWords === 0 ? 0 : Math.round((have / totalWords) * 100);
-
       result[lang] = { total: totalWords, have, missing, pct };
     }
 
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalWords, coverageTick]);
 
   const renderCoverageRow = (lang: Lang) => {
@@ -216,29 +207,33 @@ export default function SettingsScreen() {
     const more = c.missing.length > 8 ? ` +${c.missing.length - 8} more` : "";
 
     return (
-      <View style={styles.langCard} key={lang}>
-        <View style={styles.langTop}>
+      <View style={styles.coverageCard} key={lang}>
+        <View style={styles.coverageTop}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.langTitle}>{titleForLang(lang)}</Text>
-            <Text style={styles.langMeta}>
-              Native audio:{" "}
-              <Text style={styles.strong}>
+            <View style={styles.coverageTitleRow}>
+              <Text style={styles.coverageTag}>{shortForLang(lang)}</Text>
+              <Text style={styles.coverageTitle}>{titleForLang(lang)}</Text>
+            </View>
+
+            <Text style={styles.coverageMeta}>
+              Native audio{" "}
+              <Text style={styles.coverageStrong}>
                 {c.have}/{c.total}
               </Text>{" "}
-              • Missing: <Text style={styles.strong}>{c.missing.length}</Text>
+              • Missing <Text style={styles.coverageStrong}>{c.missing.length}</Text>
             </Text>
           </View>
 
-          <View style={styles.pctPill}>
-            <Text style={styles.pctText}>{pct}%</Text>
+          <View style={styles.coveragePctPill}>
+            <Text style={styles.coveragePctText}>{pct}%</Text>
           </View>
         </View>
 
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${pct}%` }]} />
+        <View style={styles.coverageTrack}>
+          <View style={[styles.coverageFill, { width: `${pct}%` }]} />
         </View>
 
-        <Text style={styles.langHint}>
+        <Text style={styles.coverageHint}>
           Next IDs: {preview || "none"}
           {more}
         </Text>
@@ -251,11 +246,12 @@ export default function SettingsScreen() {
   const target = appSettings?.targetLang ?? "yo";
 
   const setLang = (l: AudioLang) => savePatch({ targetLang: l });
-  const bumpRate = (delta: number) => savePatch({ speechRate: clamp(rate + delta, 0.5, 1.2) });
-  const bumpPitch = (delta: number) => savePatch({ speechPitch: clamp(pitch + delta, 0.6, 1.4) });
+  const bumpRate = (delta: number) =>
+    savePatch({ speechRate: clamp(rate + delta, 0.5, 1.2) });
+  const bumpPitch = (delta: number) =>
+    savePatch({ speechPitch: clamp(pitch + delta, 0.6, 1.4) });
 
-  const gateTitle =
-    pendingAction === "factory_reset" ? "Parent gate" : "Parent gate";
+  const gateTitle = "Parent gate";
   const gateSubtitle =
     pendingAction === "factory_reset"
       ? "Solve the math to factory reset (clears learned + session)"
@@ -263,22 +259,42 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.watermarkWrap} pointerEvents="none">
-        <Watermark />
-      </View>
-
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.h1}>Settings</Text>
-          <Text style={styles.sub}>Make it feel perfect for kids and parents.</Text>
+        <View style={styles.topBar}>
+          <Text style={styles.topLabel}>settings</Text>
         </View>
 
-        {/* Learning defaults */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Learning defaults</Text>
-          <Text style={styles.cardText}>Choose the default language used across the app.</Text>
+        <View style={styles.hero}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroTextWrap}>
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>Parent controls</Text>
+              </View>
 
-          <View style={styles.pillRow}>
+              <Text style={styles.heroTitle}>Settings</Text>
+              <Text style={styles.heroSubtitle}>
+                Fine-tune learning defaults, voice fallback, and protected reset tools.
+              </Text>
+            </View>
+
+            <View style={styles.heroStatCard}>
+              <Text style={styles.heroStatValue}>{coverage[target].pct}%</Text>
+              <Text style={styles.heroStatLabel}>audio</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Learning defaults</Text>
+            <Text style={styles.sectionHint}>Default language</Text>
+          </View>
+
+          <Text style={styles.sectionText}>
+            Choose the default language used across the app.
+          </Text>
+
+          <View style={styles.langRow}>
             {(["yo", "ig", "pg"] as AudioLang[]).map((l) => {
               const active = l === target;
               return (
@@ -287,13 +303,13 @@ export default function SettingsScreen() {
                   onPress={() => setLang(l)}
                   disabled={!appSettings || saving}
                   style={({ pressed }) => [
-                    styles.pill,
-                    active && styles.pillOn,
-                    pressed && { opacity: 0.9 },
-                    (!appSettings || saving) && { opacity: 0.6 },
+                    styles.langPill,
+                    active && styles.langPillOn,
+                    pressed && styles.pressDown,
+                    (!appSettings || saving) && styles.disabledButton,
                   ]}
                 >
-                  <Text style={[styles.pillText, active && styles.pillTextOn]}>
+                  <Text style={[styles.langPillText, active && styles.langPillTextOn]}>
                     {l.toUpperCase()}
                   </Text>
                 </Pressable>
@@ -301,35 +317,45 @@ export default function SettingsScreen() {
             })}
           </View>
 
-          <Text style={styles.note}>Learned progress is tracked per language.</Text>
+          <Text style={styles.sectionNote}>
+            Learned progress is tracked separately for each language.
+          </Text>
         </View>
 
-        {/* Voice tuning */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Voice tuning (TTS fallback)</Text>
-          <Text style={styles.cardText}>
-            Native audio plays first. These settings only affect the fallback voice.
+        <View style={styles.voiceCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Voice tuning</Text>
+            <Text style={styles.sectionHint}>TTS fallback</Text>
+          </View>
+
+          <Text style={styles.sectionText}>
+            Native audio plays first. These controls only affect fallback speech.
           </Text>
 
           <View style={styles.kpiRow}>
-            <View style={styles.kpiBox}>
-              <Text style={styles.kpiLabel}>Rate</Text>
-              <Text style={styles.kpiValue}>{rate.toFixed(2)}</Text>
+            <View style={styles.kpiDarkCard}>
+              <Text style={styles.kpiDarkLabel}>Rate</Text>
+              <Text style={styles.kpiDarkValue}>{rate.toFixed(2)}</Text>
             </View>
 
-            <View style={styles.kpiBox}>
+            <View style={styles.kpiCard}>
               <Text style={styles.kpiLabel}>Pitch</Text>
               <Text style={styles.kpiValue}>{pitch.toFixed(2)}</Text>
             </View>
           </View>
 
-          <View style={styles.controlRow}>
+          <View style={styles.controlBlock}>
             <Text style={styles.controlLabel}>Speech rate</Text>
-            <View style={styles.stepper}>
+
+            <View style={styles.stepperRow}>
               <Pressable
                 onPress={() => bumpRate(-0.05)}
                 disabled={!appSettings || saving}
-                style={({ pressed }) => [styles.stepBtn, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.stepBtn,
+                  pressed && styles.pressDown,
+                  (!appSettings || saving) && styles.disabledButton,
+                ]}
               >
                 <Text style={styles.stepText}>−</Text>
               </Pressable>
@@ -337,7 +363,11 @@ export default function SettingsScreen() {
               <Pressable
                 onPress={() => savePatch({ speechRate: 0.85 })}
                 disabled={!appSettings || saving}
-                style={({ pressed }) => [styles.midBtn, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.midBtn,
+                  pressed && styles.pressDown,
+                  (!appSettings || saving) && styles.disabledButton,
+                ]}
               >
                 <Text style={styles.midText}>Default</Text>
               </Pressable>
@@ -345,20 +375,29 @@ export default function SettingsScreen() {
               <Pressable
                 onPress={() => bumpRate(0.05)}
                 disabled={!appSettings || saving}
-                style={({ pressed }) => [styles.stepBtn, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.stepBtn,
+                  pressed && styles.pressDown,
+                  (!appSettings || saving) && styles.disabledButton,
+                ]}
               >
                 <Text style={styles.stepText}>+</Text>
               </Pressable>
             </View>
           </View>
 
-          <View style={styles.controlRow}>
+          <View style={styles.controlBlock}>
             <Text style={styles.controlLabel}>Speech pitch</Text>
-            <View style={styles.stepper}>
+
+            <View style={styles.stepperRow}>
               <Pressable
                 onPress={() => bumpPitch(-0.05)}
                 disabled={!appSettings || saving}
-                style={({ pressed }) => [styles.stepBtn, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.stepBtn,
+                  pressed && styles.pressDown,
+                  (!appSettings || saving) && styles.disabledButton,
+                ]}
               >
                 <Text style={styles.stepText}>−</Text>
               </Pressable>
@@ -366,7 +405,11 @@ export default function SettingsScreen() {
               <Pressable
                 onPress={() => savePatch({ speechPitch: 1.0 })}
                 disabled={!appSettings || saving}
-                style={({ pressed }) => [styles.midBtn, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.midBtn,
+                  pressed && styles.pressDown,
+                  (!appSettings || saving) && styles.disabledButton,
+                ]}
               >
                 <Text style={styles.midText}>Default</Text>
               </Pressable>
@@ -374,7 +417,11 @@ export default function SettingsScreen() {
               <Pressable
                 onPress={() => bumpPitch(0.05)}
                 disabled={!appSettings || saving}
-                style={({ pressed }) => [styles.stepBtn, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.stepBtn,
+                  pressed && styles.pressDown,
+                  (!appSettings || saving) && styles.disabledButton,
+                ]}
               >
                 <Text style={styles.stepText}>+</Text>
               </Pressable>
@@ -385,35 +432,42 @@ export default function SettingsScreen() {
             onPress={testVoice}
             disabled={!appSettings}
             style={({ pressed }) => [
-              styles.primaryBtn,
-              pressed && { opacity: 0.92 },
-              !appSettings && { opacity: 0.6 },
+              styles.primaryButton,
+              pressed && styles.pressDown,
+              !appSettings && styles.disabledButton,
             ]}
           >
-            <Text style={styles.primaryText}>Test voice</Text>
-            <Text style={styles.primarySub}>Plays a short sample in the selected language</Text>
+            <Text style={styles.primaryButtonText}>Test voice</Text>
+            <Text style={styles.primaryButtonSub}>
+              Plays a short sample in the selected language
+            </Text>
           </Pressable>
         </View>
 
-        {/* Resets */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Reset</Text>
-          <Text style={styles.cardText}>Both actions are protected by Parent Gate.</Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Reset tools</Text>
+            <Text style={styles.sectionHint}>Parent protected</Text>
+          </View>
+
+          <Text style={styles.sectionText}>
+            Both actions below require Parent Gate before they can run.
+          </Text>
 
           <Pressable
             onPress={() => openGateFor("reset_session")}
             disabled={isResetting}
             style={({ pressed }) => [
-              styles.secondaryBtn,
-              isResetting && { opacity: 0.6 },
-              pressed && !isResetting && { opacity: 0.92 },
+              styles.secondaryButton,
+              pressed && !isResetting && styles.pressDown,
+              isResetting && styles.disabledButton,
             ]}
           >
-            <Text style={styles.secondaryText}>
-              {isResetting ? "Please wait…" : "Reset Learn + Games (session)"}
+            <Text style={styles.secondaryButtonText}>
+              {isResetting ? "Please wait…" : "Reset learn + games"}
             </Text>
-            <Text style={styles.secondarySub}>
-              Clears practice + games stats (does NOT clear learned words)
+            <Text style={styles.secondaryButtonSub}>
+              Clears practice + game stats only
             </Text>
           </Pressable>
 
@@ -421,37 +475,42 @@ export default function SettingsScreen() {
             onPress={() => openGateFor("factory_reset")}
             disabled={isResetting}
             style={({ pressed }) => [
-              styles.dangerBtn,
-              isResetting && { opacity: 0.6 },
-              pressed && !isResetting && { opacity: 0.92 },
+              styles.dangerButton,
+              pressed && !isResetting && styles.pressDown,
+              isResetting && styles.disabledButton,
             ]}
           >
-            <Text style={styles.dangerText}>Factory Reset (All)</Text>
-            <Text style={styles.dangerSub}>
-              Clears learned words (YO/IG/PG) + session stats
+            <Text style={styles.dangerButtonText}>Factory reset (all)</Text>
+            <Text style={styles.dangerButtonSub}>
+              Clears learned words and session progress
             </Text>
           </Pressable>
 
-          <Text style={styles.note}>
-            Factory reset also clears milestone trackers so celebrations stay clean.
+          <Text style={styles.sectionNote}>
+            Factory reset also clears milestone trackers so progress celebrations stay clean.
           </Text>
         </View>
 
-        {/* Audio coverage */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Audio coverage</Text>
-          <Text style={styles.cardText}>Recorded MP3 coverage per language.</Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Audio coverage</Text>
+            <Text style={styles.sectionHint}>Recorded MP3 status</Text>
+          </View>
+
+          <Text style={styles.sectionText}>
+            Current native-audio coverage for Yoruba, Igbo, and Pidgin.
+          </Text>
 
           {renderCoverageRow("yo")}
           {renderCoverageRow("ig")}
           {renderCoverageRow("pg")}
 
-          <Text style={styles.note}>
+          <Text style={styles.sectionNote}>
             Workflow: assets/audio/&lt;lang&gt;/&lt;id&gt;.mp3 then rebuild audiomap.
           </Text>
         </View>
 
-        <View style={{ height: 30 }} />
+        <View style={{ height: 28 }} />
       </ScrollView>
 
       <ParentGateModal
@@ -468,149 +527,407 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  watermarkWrap: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 0 },
-  container: { padding: 16, paddingBottom: 90, zIndex: 1 },
-
-  header: { paddingTop: 8 },
-  h1: { fontSize: 26, fontWeight: "900", color: colors.text },
-  sub: { marginTop: 6, color: colors.muted, fontWeight: "700" },
-
-  card: {
-    marginTop: 14,
-    borderRadius: 18,
-    padding: 14,
+  screen: {
+    flex: 1,
     backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
   },
-  cardTitle: { color: colors.text, fontWeight: "900", fontSize: 16 },
-  cardText: { marginTop: 6, color: colors.muted, fontWeight: "700", lineHeight: 18 },
-  note: { marginTop: 10, color: colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 16 },
 
-  pillRow: { marginTop: 12, flexDirection: "row", gap: 10 as any },
-  pill: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+  container: {
+    paddingTop: 12,
+    paddingHorizontal: 18,
+    paddingBottom: 40,
+  },
+
+  topBar: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 12,
+  },
+  topLabel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111111",
+    textTransform: "lowercase",
+  },
+
+  hero: {
+    marginTop: 6,
+    backgroundColor: "#f6f8fc",
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "#e9edf5",
+    padding: 18,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  heroTextWrap: {
+    flex: 1,
+  },
+  heroBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#e9f2ff",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  heroBadgeText: {
+    color: "#1864d9",
+    fontWeight: "800",
+    fontSize: 12,
+    textTransform: "uppercase",
+  },
+  heroTitle: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    color: "#111111",
+  },
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#667085",
+    fontWeight: "600",
+  },
+  heroStatCard: {
+    width: 92,
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e9edf5",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroStatValue: {
+    fontSize: 24,
+    color: "#111111",
+    fontWeight: "900",
+  },
+  heroStatLabel: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "lowercase",
+  },
+
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111111",
+  },
+  sectionHint: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#98a2b3",
+  },
+
+  sectionCard: {
+    marginTop: 18,
+    backgroundColor: "#ffffff",
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+  },
+  voiceCard: {
+    marginTop: 18,
+    backgroundColor: "#f7f8fa",
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+  },
+
+  sectionText: {
+    marginTop: 8,
+    color: "#667085",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  sectionNote: {
+    marginTop: 12,
+    color: "#98a2b3",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
+
+  langRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+  langPill: {
+    paddingVertical: 11,
+    paddingHorizontal: 16,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
-    backgroundColor: "#fff",
+    borderColor: "#e6eaf1",
+    backgroundColor: "#ffffff",
   },
-  pillOn: { borderColor: colors.text, backgroundColor: "#f3f3f3" },
-  pillText: { color: colors.muted, fontWeight: "900" },
-  pillTextOn: { color: colors.text },
+  langPillOn: {
+    borderColor: "#bfd7ff",
+    backgroundColor: "#f5faff",
+  },
+  langPillText: {
+    color: "#667085",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+  langPillTextOn: {
+    color: "#1864d9",
+  },
 
-  kpiRow: { marginTop: 12, flexDirection: "row", gap: 12 as any },
-  kpiBox: {
+  kpiRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 12,
+  },
+  kpiDarkCard: {
     flex: 1,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    backgroundColor: "#fafafa",
+    backgroundColor: "#111111",
+    borderRadius: 24,
+    padding: 16,
   },
-  kpiLabel: { color: colors.muted, fontWeight: "800", fontSize: 12 },
-  kpiValue: { marginTop: 6, color: colors.text, fontWeight: "900", fontSize: 18 },
+  kpiDarkLabel: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  kpiDarkValue: {
+    marginTop: 10,
+    color: "#ffffff",
+    fontSize: 30,
+    fontWeight: "900",
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e7ebf2",
+  },
+  kpiLabel: {
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  kpiValue: {
+    marginTop: 10,
+    color: "#111111",
+    fontSize: 30,
+    fontWeight: "900",
+  },
 
-  controlRow: { marginTop: 14 },
-  controlLabel: { color: colors.text, fontWeight: "900" },
-
-  stepper: { marginTop: 10, flexDirection: "row", gap: 10 as any, alignItems: "center" },
+  controlBlock: {
+    marginTop: 16,
+  },
+  controlLabel: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  stepperRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
   stepBtn: {
-    width: 52,
-    height: 44,
-    borderRadius: 14,
+    width: 54,
+    height: 46,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.12)",
-    backgroundColor: "#fff",
+    borderColor: "#e7ebf2",
+    backgroundColor: "#ffffff",
   },
-  stepText: { color: colors.text, fontWeight: "900", fontSize: 18 },
-
+  stepText: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 20,
+  },
   midBtn: {
     flex: 1,
-    height: 44,
-    borderRadius: 14,
+    height: 46,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.12)",
-    backgroundColor: "#fafafa",
+    borderColor: "#e7ebf2",
+    backgroundColor: "#ffffff",
   },
-  midText: { color: colors.text, fontWeight: "900" },
+  midText: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 14,
+  },
 
-  primaryBtn: {
-    marginTop: 14,
-    borderRadius: 16,
-    paddingVertical: 12,
+  primaryButton: {
+    marginTop: 16,
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: "#111111",
+    borderWidth: 1,
+    borderColor: "#111111",
     alignItems: "center",
-    backgroundColor: colors.text,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  primaryButtonSub: {
+    marginTop: 4,
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  secondaryButton: {
+    marginTop: 16,
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.text,
+    borderColor: "#e7ebf2",
   },
-  primaryText: { color: colors.background, fontWeight: "900" },
-  primarySub: { marginTop: 3, color: colors.background, opacity: 0.85, fontSize: 12, fontWeight: "800" },
+  secondaryButtonText: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  secondaryButtonSub: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+  },
 
-  secondaryBtn: {
+  dangerButton: {
     marginTop: 12,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: "#fafafa",
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: "#fff5f4",
+    borderWidth: 1.5,
+    borderColor: "#d92d20",
+  },
+  dangerButtonText: {
+    color: "#d92d20",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  dangerButtonSub: {
+    marginTop: 4,
+    color: "#b42318",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  coverageCard: {
+    marginTop: 14,
+    backgroundColor: "#f7f8fa",
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.12)",
+    borderColor: "#eceff4",
   },
-  secondaryText: { color: colors.text, fontWeight: "900" },
-  secondarySub: { marginTop: 3, color: colors.muted, fontWeight: "700", fontSize: 12 },
-
-  dangerBtn: {
-    marginTop: 12,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255,60,60,0.08)",
-    borderWidth: 2,
-    borderColor: "#d00",
+  coverageTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  dangerText: { color: colors.text, fontWeight: "900" },
-  dangerSub: { marginTop: 3, color: colors.muted, fontWeight: "700", fontSize: 12 },
-
-  langCard: {
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: "#fafafa",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
+  coverageTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  langTop: { flexDirection: "row", justifyContent: "space-between", gap: 10 as any },
-  langTitle: { color: colors.text, fontWeight: "900", fontSize: 14 },
-  langMeta: { marginTop: 4, color: colors.muted, fontWeight: "700", fontSize: 12 },
-  strong: { color: colors.text, fontWeight: "900" },
-
-  pctPill: {
-    minWidth: 54,
+  coverageTag: {
+    backgroundColor: "#111111",
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  coverageTitle: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  coverageMeta: {
+    marginTop: 8,
+    color: "#667085",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  coverageStrong: {
+    color: "#111111",
+    fontWeight: "900",
+  },
+  coveragePctPill: {
+    minWidth: 58,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
-    backgroundColor: "#fff",
+    borderColor: "#e7ebf2",
+    backgroundColor: "#ffffff",
   },
-  pctText: { color: colors.text, fontWeight: "900" },
-
-  track: {
-    marginTop: 10,
+  coveragePctText: {
+    color: "#111111",
+    fontWeight: "900",
+  },
+  coverageTrack: {
+    marginTop: 12,
     height: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.06)",
+    backgroundColor: "#e8edf5",
     overflow: "hidden",
   },
-  fill: { height: "100%", borderRadius: 999, backgroundColor: colors.accent },
+  coverageFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#1864d9",
+  },
+  coverageHint: {
+    marginTop: 10,
+    color: "#98a2b3",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
 
-  langHint: { marginTop: 10, color: colors.muted, fontSize: 12, fontWeight: "700", lineHeight: 16 },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  pressDown: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
+  },
 });

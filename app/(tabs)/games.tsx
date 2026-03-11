@@ -1,4 +1,3 @@
-// app/(tabs)/games.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -13,10 +12,8 @@ import * as speech from "expo-speech";
 import * as haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 
-import { colors } from "../theme";
-import { flashcards } from "../data/flashcards";
 import ParentGateModal from "../components/parentgate.modal";
-import Watermark from "../components/watermark";
+import { flashcards } from "../data/flashcards";
 import { getsettings, type settings } from "../utils/settings";
 import { playWordAudio, type AudioLang } from "../utils/play-word-audio";
 
@@ -26,13 +23,9 @@ type Difficulty = "easy" | "normal" | "hard";
 const score_key = "games_soundquiz_score_v1";
 const streak_key = "games_soundquiz_streak_v1";
 
-// ✅ Adaptive difficulty (per lang + mode)
 const adaptive_key = (lang: AudioLang, mode: Mode) =>
   `games_adaptive_v1_${lang}_${mode}`;
 const ADAPTIVE_WINDOW = 20;
-
-const BTN_DARK = "#000";
-const BTN_DARK_TEXT = "#fff";
 
 function shuffle<T>(arr: T[]) {
   const a = [...arr];
@@ -42,12 +35,15 @@ function shuffle<T>(arr: T[]) {
   }
   return a;
 }
+
 function pickN<T>(arr: T[], n: number) {
   return shuffle(arr).slice(0, n);
 }
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
 function computeLevelFromStreak(streak: number) {
   if (streak >= 20) return 5;
   if (streak >= 14) return 4;
@@ -55,11 +51,13 @@ function computeLevelFromStreak(streak: number) {
   if (streak >= 5) return 2;
   return 1;
 }
+
 function difficultyForLevel(level: number): Difficulty {
   if (level >= 4) return "hard";
   if (level >= 2) return "normal";
   return "easy";
 }
+
 function choicesCount(d: Difficulty) {
   if (d === "hard") return 6;
   if (d === "normal") return 4;
@@ -71,6 +69,7 @@ function difficultyStepUp(d: Difficulty): Difficulty {
   if (d === "normal") return "hard";
   return "hard";
 }
+
 function difficultyStepDown(d: Difficulty): Difficulty {
   if (d === "hard") return "normal";
   if (d === "normal") return "easy";
@@ -88,26 +87,32 @@ function parseBoolArray(raw: string | null): boolean[] {
   }
 }
 
-/**
- * ✅ Prevent placeholder strings like "word_77" from showing (UI).
- */
 function isPlaceholderWord(raw: string) {
   return /^word_\d+$/i.test(String(raw ?? ""));
 }
+
 function prettyWordLabel(raw: string, id: number) {
   const s = String(raw ?? "");
   if (isPlaceholderWord(s)) return `Word ${id}`;
   return s;
 }
 
-/**
- * ✅ Safe text for TTS fallback (NEVER speak "word_###")
- * For sound quiz we speak the target translation (yo/ig/pg). If missing, speak a safe message.
- */
 function safeTTSTextForSoundQuiz(tr: string, id: number) {
   const s = String(tr ?? "").trim();
   if (s) return s;
   return `Audio missing ${id}`;
+}
+
+function titleForLang(lang: AudioLang) {
+  if (lang === "yo") return "Yoruba";
+  if (lang === "ig") return "Igbo";
+  return "Pidgin";
+}
+
+function shortForLang(lang: AudioLang) {
+  if (lang === "yo") return "YO";
+  if (lang === "ig") return "IG";
+  return "PG";
 }
 
 export default function GamesScreen() {
@@ -137,6 +142,8 @@ export default function GamesScreen() {
 
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const confettiAnim = useRef(new Animated.Value(0)).current;
+  const badgeAnim = useRef(new Animated.Value(0)).current;
+  const [feedbackText, setFeedbackText] = useState<string>("");
 
   useEffect(() => {
     const p = params.lang as string | undefined;
@@ -173,16 +180,20 @@ export default function GamesScreen() {
 
   const currentId = Number((current as any)?.id ?? questionId);
 
-  // ✅ pretty label for the target English word (UI only)
   const questionWordEn = useMemo(() => {
     const raw = String((current as any)?.en ?? "");
     return prettyWordLabel(raw, currentId);
   }, [current, currentId]);
 
-  // ✅ target translation (what we WANT to speak in sound mode)
   const targetTr = useMemo(() => {
     return String((current as any)?.[lang] ?? "").trim();
   }, [current, lang]);
+
+  const totalCards = flashcards.length || 1;
+  const learnedPercent = useMemo(() => {
+    if (!attempts) return 0;
+    return Math.round((correct / attempts) * 100);
+  }, [correct, attempts]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -193,15 +204,12 @@ export default function GamesScreen() {
     } catch {}
   }, []);
 
-  const saveStats = useCallback(
-    async (nextScore: number, nextStreak: number) => {
-      try {
-        await AsyncStorage.setItem(score_key, String(nextScore));
-        await AsyncStorage.setItem(streak_key, String(nextStreak));
-      } catch {}
-    },
-    []
-  );
+  const saveStats = useCallback(async (nextScore: number, nextStreak: number) => {
+    try {
+      await AsyncStorage.setItem(score_key, String(nextScore));
+      await AsyncStorage.setItem(streak_key, String(nextStreak));
+    } catch {}
+  }, []);
 
   const loadAdaptive = useCallback(async (l: AudioLang, m: Mode) => {
     try {
@@ -212,17 +220,14 @@ export default function GamesScreen() {
     }
   }, []);
 
-  const saveAdaptive = useCallback(
-    async (l: AudioLang, m: Mode, arr: boolean[]) => {
-      try {
-        await AsyncStorage.setItem(
-          adaptive_key(l, m),
-          JSON.stringify(arr.slice(-ADAPTIVE_WINDOW))
-        );
-      } catch {}
-    },
-    []
-  );
+  const saveAdaptive = useCallback(async (l: AudioLang, m: Mode, arr: boolean[]) => {
+    try {
+      await AsyncStorage.setItem(
+        adaptive_key(l, m),
+        JSON.stringify(arr.slice(-ADAPTIVE_WINDOW))
+      );
+    } catch {}
+  }, []);
 
   const pushAdaptiveResult = useCallback(
     async (isCorrect: boolean) => {
@@ -265,8 +270,7 @@ export default function GamesScreen() {
 
   useEffect(() => {
     primeQuestion();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionId, lang, mode, difficulty]);
+  }, [questionId, lang, mode, difficulty, primeQuestion]);
 
   useEffect(() => {
     loadAdaptive(lang, mode);
@@ -288,20 +292,34 @@ export default function GamesScreen() {
     }, [loadStats, stopAudio])
   );
 
-  const runSparkles = useCallback(() => {
+  const runGoodFeedback = useCallback((text: string) => {
+    setFeedbackText(text);
     sparkleAnim.setValue(0);
-    Animated.timing(sparkleAnim, {
-      toValue: 1,
-      duration: 650,
-      useNativeDriver: true,
-    }).start(() => {
+    badgeAnim.setValue(0);
+
+    Animated.parallel([
       Animated.timing(sparkleAnim, {
-        toValue: 0,
-        duration: 250,
+        toValue: 1,
+        duration: 650,
         useNativeDriver: true,
-      }).start();
+      }),
+      Animated.sequence([
+        Animated.timing(badgeAnim, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.delay(900),
+        Animated.timing(badgeAnim, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      sparkleAnim.setValue(0);
     });
-  }, [sparkleAnim]);
+  }, [sparkleAnim, badgeAnim]);
 
   const runConfetti = useCallback(() => {
     confettiAnim.setValue(0);
@@ -323,10 +341,12 @@ export default function GamesScreen() {
       const gateEnabled = settingsState
         ? !!(settingsState as any).parent_gate
         : true;
+
       if (!gateEnabled) {
         fn();
         return;
       }
+
       setPendingAction(() => fn);
       setGateOpen(true);
     },
@@ -341,9 +361,7 @@ export default function GamesScreen() {
         ? safeTTSTextForSoundQuiz(targetTr, currentId)
         : safeTTSTextForSoundQuiz(targetTr, currentId);
 
-    const ttsLang =
-      lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG";
-
+    const ttsLang = lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG";
     const rate = lang === "pg" ? 0.95 : 0.85;
 
     await playWordAudio({
@@ -353,7 +371,7 @@ export default function GamesScreen() {
       ttsLang,
       rate,
     });
-  }, [stopAudio, lang, currentId, targetTr, mode]);
+  }, [stopAudio, mode, targetTr, currentId, lang]);
 
   const onPick = useCallback(
     async (picked: any) => {
@@ -384,18 +402,23 @@ export default function GamesScreen() {
         setStreak(nextStreak);
         await saveStats(nextScore, nextStreak);
 
-        runSparkles();
+        runGoodFeedback("Correct ✅");
+
         if (difficulty === "hard") runConfetti();
 
         const prevLevel = computeLevelFromStreak(streak);
         const nextLevel = computeLevelFromStreak(nextStreak);
-        if (nextLevel > prevLevel) runConfetti();
+        if (nextLevel > prevLevel) {
+          runGoodFeedback(`Level ${nextLevel} 🎉`);
+          runConfetti();
+        }
 
         setTimeout(() => nextQuestion(), 450);
       } else {
         const nextStreak = 0;
         setStreak(nextStreak);
         await saveStats(score, nextStreak);
+        runGoodFeedback("Try again");
         setTimeout(() => setLocked(false), 500);
       }
     },
@@ -407,7 +430,7 @@ export default function GamesScreen() {
       score,
       streak,
       saveStats,
-      runSparkles,
+      runGoodFeedback,
       runConfetti,
       nextQuestion,
       difficulty,
@@ -420,8 +443,8 @@ export default function GamesScreen() {
       setStreak(0);
       setAttempts(0);
       setCorrect(0);
-
       setRecentResults([]);
+      setFeedbackText("");
 
       try {
         await AsyncStorage.setItem(score_key, "0");
@@ -442,35 +465,12 @@ export default function GamesScreen() {
     });
   }, [gated]);
 
-  const LanguagePills = (
-    <View style={styles.langRow}>
-      {(["yo", "ig", "pg"] as AudioLang[]).map((k) => {
-        const selected = k === lang;
-        return (
-          <Pressable
-            key={k}
-            onPress={() => setLang(k)}
-            style={[styles.pill, selected && styles.pillOn]}
-          >
-            <Text style={[styles.pillText, selected && styles.pillTextOn]}>
-              {k.toUpperCase()}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-
   return (
     <View style={styles.screen}>
-      <View style={styles.watermarkWrap} pointerEvents="none">
-        <Watermark />
-      </View>
-
       <Animated.View
         pointerEvents="none"
         style={[
-          styles.sparkles,
+          styles.sparkleWrap,
           {
             opacity: sparkleAnim,
             transform: [
@@ -484,13 +484,35 @@ export default function GamesScreen() {
           },
         ]}
       >
-        <Text style={styles.sparkleText}>✨✨✨</Text>
+        <Text style={styles.sparkleText}>✨ ✨ ✨</Text>
       </Animated.View>
 
       <Animated.View
         pointerEvents="none"
         style={[
-          styles.confetti,
+          styles.badgeWrap,
+          {
+            opacity: badgeAnim,
+            transform: [
+              {
+                translateY: badgeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-14, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.badgeCard}>
+          <Text style={styles.badgeText}>{feedbackText}</Text>
+        </View>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.confettiWrap,
           {
             opacity: confettiAnim,
             transform: [
@@ -504,74 +526,146 @@ export default function GamesScreen() {
           },
         ]}
       >
-        <Text style={styles.confettiText}>🎉🎊🎉🎊</Text>
+        <Text style={styles.confettiText}>🎉 🎊 🎉 🎊</Text>
       </Animated.View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.h1}>Games</Text>
-        <Text style={styles.sub}>
-          Pick the correct word • Lang: {lang.toUpperCase()}
-        </Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topBar}>
+          <Text style={styles.topLabel}>games</Text>
+        </View>
 
-        {LanguagePills}
+        <View style={styles.hero}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroTextWrap}>
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>{titleForLang(lang)}</Text>
+              </View>
 
-        <View style={styles.topRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{level}</Text>
-            <Text style={styles.statLabel}>Level</Text>
-            <Text style={styles.statTiny}>{difficulty.toUpperCase()}</Text>
+              <Text style={styles.heroTitle}>Games</Text>
+              <Text style={styles.heroSubtitle}>
+                Listen, match, and build confidence through quick practice rounds.
+              </Text>
+            </View>
+
+            <View style={styles.heroModeCard}>
+              <Text style={styles.heroModeValue}>{mode === "sound" ? "Sound" : "Match"}</Text>
+              <Text style={styles.heroModeLabel}>mode</Text>
+            </View>
           </View>
 
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{streak}</Text>
-            <Text style={styles.statLabel}>Streak</Text>
-          </View>
-
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{accuracy}%</Text>
-            <Text style={styles.statLabel}>Accuracy</Text>
-            <Text style={styles.statTiny}>
-              {correct}/{attempts}
-            </Text>
+          <View style={styles.heroBottomRow}>
+            <View style={styles.heroMiniPill}>
+              <Text style={styles.heroMiniPillText}>{difficulty.toUpperCase()}</Text>
+            </View>
+            <View style={styles.heroMiniPillSoft}>
+              <Text style={styles.heroMiniPillSoftText}>
+                {recentResults.length ? `${recentAccuracy}% recent` : "warming up"}
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.adaptiveRow}>
-          <Text style={styles.adaptiveText}>
-            Adaptive:{" "}
-            <Text style={{ fontWeight: "900", color: colors.text }}>
-              {difficulty.toUpperCase()}
-            </Text>
-          </Text>
-          <Text style={styles.adaptiveText}>
-            Recent:{" "}
-            <Text style={{ fontWeight: "900", color: colors.text }}>
+        <View style={styles.langSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Choose a language</Text>
+            <Text style={styles.sectionHint}>Switch anytime</Text>
+          </View>
+
+          <View style={styles.langRow}>
+            {(["yo", "ig", "pg"] as AudioLang[]).map((k) => {
+              const selected = k === lang;
+              return (
+                <Pressable
+                  key={k}
+                  onPress={() => setLang(k)}
+                  style={({ pressed }) => [
+                    styles.langPill,
+                    selected && styles.langPillOn,
+                    pressed && styles.pressDown,
+                  ]}
+                >
+                  <Text style={[styles.langPillText, selected && styles.langPillTextOn]}>
+                    {shortForLang(k)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiCardDark}>
+            <Text style={styles.kpiDarkLabel}>Score</Text>
+            <Text style={styles.kpiDarkValue}>{score}</Text>
+            <Text style={styles.kpiDarkSub}>Keep the streak alive</Text>
+          </View>
+
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Level</Text>
+            <Text style={styles.kpiValue}>{level}</Text>
+            <Text style={styles.kpiSub}>{difficulty.toUpperCase()}</Text>
+          </View>
+
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Streak</Text>
+            <Text style={styles.kpiValue}>{streak}</Text>
+            <Text style={styles.kpiSub}>best run</Text>
+          </View>
+        </View>
+
+        <View style={styles.metricsRow}>
+          <View style={styles.metricWide}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Accuracy</Text>
+              <Text style={styles.sectionHint}>
+                {correct}/{attempts || 0}
+              </Text>
+            </View>
+            <Text style={styles.metricBig}>{accuracy}%</Text>
+            <View style={styles.track}>
+              <View style={[styles.fill, { width: `${clamp(accuracy, 0, 100)}%` }]} />
+            </View>
+          </View>
+
+          <View style={styles.metricSmall}>
+            <Text style={styles.metricSmallLabel}>Window</Text>
+            <Text style={styles.metricSmallValue}>
               {recentResults.length ? `${recentAccuracy}%` : "—"}
-            </Text>{" "}
-            <Text style={styles.adaptiveTiny}>
-              ({recentResults.length}/{ADAPTIVE_WINDOW})
             </Text>
-          </Text>
+            <Text style={styles.metricSmallSub}>
+              {recentResults.length}/{ADAPTIVE_WINDOW}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.label}>Question</Text>
-          <Text style={styles.big}>
+        <View style={styles.questionCard}>
+          <View style={styles.questionHeader}>
+            <Text style={styles.questionLabel}>Question</Text>
+            <View style={styles.questionTag}>
+              <Text style={styles.questionTagText}>
+                {mode === "sound" ? "Sound quiz" : "Match mode"}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.questionText}>
             {mode === "sound"
               ? "Listen and pick the English word"
               : "Match the English word"}
           </Text>
 
-          <View style={{ height: 12 }} />
-
-          <Pressable onPress={playQuestionAudio} style={styles.darkBtn}>
-            <Text style={styles.darkText}>Play Sound</Text>
-            <Text style={styles.darkSub}>Target: {questionWordEn}</Text>
+          <Pressable
+            onPress={playQuestionAudio}
+            style={({ pressed }) => [styles.playButton, pressed && styles.pressDown]}
+          >
+            <Text style={styles.playButtonText}>Play sound</Text>
+            <Text style={styles.playButtonSub}>Target: {questionWordEn}</Text>
           </Pressable>
 
-          <View style={{ height: 10 }} />
-
-          <View style={styles.choicesWrap}>
+          <View style={styles.choiceList}>
             {choices.map((c) => {
               const id = Number((c as any)?.id ?? 0);
               const rawEn = String((c as any)?.en ?? "");
@@ -588,42 +682,54 @@ export default function GamesScreen() {
                   key={c.id}
                   disabled={locked}
                   onPress={() => onPick(c)}
-                  style={[
-                    styles.choice,
-                    locked && isCorrect && styles.choiceCorrect,
-                    locked && !isCorrect && styles.choiceDim,
+                  style={({ pressed }) => [
+                    styles.choiceCard,
+                    locked && isCorrect && styles.choiceCardCorrect,
+                    locked && !isCorrect && styles.choiceCardDim,
+                    pressed && !locked && styles.pressDown,
                   ]}
                 >
-                  <Text style={styles.choiceText}>{label}</Text>
+                  <Text style={styles.choiceCardText}>{label}</Text>
                 </Pressable>
               );
             })}
           </View>
         </View>
 
-        <View style={styles.row}>
-          <Pressable
-            disabled={locked}
-            onPress={() => setMode((m) => (m === "sound" ? "match" : "sound"))}
-            style={[styles.btn, styles.btnSecondary, locked && { opacity: 0.5 }]}
-          >
-            <Text style={styles.btnSecondaryText}>
-              Mode: {mode === "sound" ? "Sound Quiz" : "Match"}
-            </Text>
-            <Text style={styles.btnHint}>
-              {locked ? "Finish this question" : "Tap to toggle"}
-            </Text>
-          </Pressable>
+        <View style={styles.controlsCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Controls</Text>
+            <Text style={styles.sectionHint}>Round tools</Text>
+          </View>
 
-          <Pressable
-            onPress={resetProgress}
-            style={[styles.btn, styles.btnGhost]}
-          >
-            <Text style={styles.btnGhostText}>Reset</Text>
-          </Pressable>
+          <View style={styles.controlRow}>
+            <Pressable
+              disabled={locked}
+              onPress={() => setMode((m) => (m === "sound" ? "match" : "sound"))}
+              style={({ pressed }) => [
+                styles.modeButton,
+                locked && styles.disabledButton,
+                pressed && !locked && styles.pressDown,
+              ]}
+            >
+              <Text style={styles.modeButtonText}>
+                Mode: {mode === "sound" ? "Sound Quiz" : "Match"}
+              </Text>
+              <Text style={styles.modeButtonSub}>
+                {locked ? "Finish this question" : "Tap to switch"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={resetProgress}
+              style={({ pressed }) => [styles.resetButton, pressed && styles.pressDown]}
+            >
+              <Text style={styles.resetButtonText}>Reset</Text>
+            </Pressable>
+          </View>
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 28 }} />
       </ScrollView>
 
       <ParentGateModal
@@ -640,137 +746,476 @@ export default function GamesScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  watermarkWrap: {
+  screen: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+
+  container: {
+    paddingTop: 12,
+    paddingHorizontal: 18,
+    paddingBottom: 36,
+  },
+
+  topBar: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 12,
+  },
+  topLabel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111111",
+    textTransform: "lowercase",
+  },
+
+  sparkleWrap: {
     position: "absolute",
+    top: 86,
     left: 0,
     right: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
-  container: { padding: 20, paddingBottom: 40, zIndex: 1 },
-
-  h1: { fontSize: 26, fontWeight: "900", color: colors.text },
-  sub: { marginTop: 6, color: colors.muted },
-
-  langRow: { marginTop: 12, flexDirection: "row", gap: 10 as any },
-  pill: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: (colors as any).border ?? "#e5e5e5",
-    backgroundColor: (colors as any).card ?? "#f6f6f6",
-  },
-  pillOn: { borderColor: colors.primary, backgroundColor: colors.background },
-  pillText: { color: colors.muted, fontWeight: "900" },
-  pillTextOn: { color: colors.primary },
-
-  topRow: { marginTop: 14, flexDirection: "row", gap: 10 as any },
-  statBox: {
-    flex: 1,
-    backgroundColor: (colors as any).card ?? "#f6f6f6",
-    borderRadius: 18,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: (colors as any).border ?? "#e5e5e5",
-  },
-  statValue: { color: colors.text, fontWeight: "900", fontSize: 20 },
-  statLabel: {
-    marginTop: 2,
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  statTiny: { marginTop: 6, color: colors.muted, fontSize: 11 },
-
-  adaptiveRow: {
-    marginTop: 10,
-    paddingHorizontal: 4,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10 as any,
-  },
-  adaptiveText: { color: colors.muted, fontSize: 12, fontWeight: "800" },
-  adaptiveTiny: { color: colors.muted, fontSize: 11, fontWeight: "700" },
-
-  card: {
-    marginTop: 12,
-    backgroundColor: (colors as any).card ?? "#f6f6f6",
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: (colors as any).border ?? "#e5e5e5",
-  },
-  label: { color: colors.muted, fontSize: 12, fontWeight: "800" },
-  big: { marginTop: 6, color: colors.text, fontSize: 16, fontWeight: "900" },
-
-  darkBtn: {
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: BTN_DARK,
-    borderWidth: 1,
-    borderColor: BTN_DARK,
+    zIndex: 20,
     alignItems: "center",
   },
-  darkText: { color: BTN_DARK_TEXT, fontWeight: "900" },
-  darkSub: {
-    marginTop: 3,
-    color: BTN_DARK_TEXT,
-    opacity: 0.85,
-    fontSize: 12,
-    fontWeight: "800",
+  sparkleText: {
+    fontSize: 24,
   },
 
-  btn: {
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+  badgeWrap: {
+    position: "absolute",
+    top: 12,
+    left: 16,
+    right: 16,
+    zIndex: 21,
+    alignItems: "center",
+  },
+  badgeCard: {
+    backgroundColor: "#111111",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  badgeText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  confettiWrap: {
+    position: "absolute",
+    top: 48,
+    left: 0,
+    right: 0,
+    zIndex: 19,
+    alignItems: "center",
+  },
+  confettiText: {
+    fontSize: 26,
+  },
+
+  hero: {
+    marginTop: 6,
+    backgroundColor: "#f6f8fc",
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: (colors as any).border ?? "#e5e5e5",
+    borderColor: "#e9edf5",
+    padding: 18,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  heroTextWrap: {
+    flex: 1,
+  },
+  heroBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#e9f2ff",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  heroBadgeText: {
+    color: "#1864d9",
+    fontWeight: "800",
+    fontSize: 12,
+    textTransform: "uppercase",
+  },
+  heroTitle: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    color: "#111111",
+  },
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#667085",
+    fontWeight: "600",
+  },
+  heroModeCard: {
+    width: 96,
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e9edf5",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnSecondary: { backgroundColor: colors.background },
-  btnSecondaryText: { color: colors.text, fontWeight: "900" },
-  btnGhost: { backgroundColor: "transparent" },
-  btnGhostText: { color: colors.text, fontWeight: "900" },
-  btnHint: { marginTop: 3, color: colors.muted, fontSize: 12 },
-
-  choicesWrap: { marginTop: 10, gap: 10 as any },
-  choice: {
-    paddingVertical: 12,
+  heroModeValue: {
+    fontSize: 18,
+    color: "#111111",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  heroModeLabel: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "lowercase",
+  },
+  heroBottomRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  heroMiniPill: {
+    backgroundColor: "#111111",
     paddingHorizontal: 12,
-    borderRadius: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  heroMiniPillText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  heroMiniPillSoft: {
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: (colors as any).border ?? "#e5e5e5",
-    backgroundColor: colors.background,
+    borderColor: "#e7ebf2",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
   },
-  choiceText: { color: colors.text, fontWeight: "900", fontSize: 16 },
-  choiceCorrect: { borderColor: colors.primary },
-  choiceDim: { opacity: 0.65 },
+  heroMiniPillSoftText: {
+    color: "#344054",
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
-  row: { marginTop: 12, flexDirection: "row", gap: 10 as any },
-
-  sparkles: {
-    position: "absolute",
-    top: 90,
-    left: 0,
-    right: 0,
+  sectionHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    zIndex: 3,
+    justifyContent: "space-between",
+    gap: 10,
   },
-  sparkleText: { fontSize: 26 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111111",
+  },
+  sectionHint: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#98a2b3",
+  },
 
-  confetti: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 4,
+  langSection: {
+    marginTop: 18,
   },
-  confettiText: { fontSize: 28 },
+  langRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 10,
+  },
+  langPill: {
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e6eaf1",
+    backgroundColor: "#ffffff",
+  },
+  langPillOn: {
+    borderColor: "#bfd7ff",
+    backgroundColor: "#f5faff",
+  },
+  langPillText: {
+    color: "#667085",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+  langPillTextOn: {
+    color: "#1864d9",
+  },
+
+  kpiRow: {
+    marginTop: 18,
+    flexDirection: "row",
+    gap: 12,
+  },
+  kpiCardDark: {
+    flex: 1.05,
+    backgroundColor: "#111111",
+    borderRadius: 24,
+    padding: 16,
+  },
+  kpiDarkLabel: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  kpiDarkValue: {
+    marginTop: 10,
+    color: "#ffffff",
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "900",
+  },
+  kpiDarkSub: {
+    marginTop: 4,
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  kpiCard: {
+    flex: 0.9,
+    backgroundColor: "#f7f8fa",
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+  },
+  kpiLabel: {
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  kpiValue: {
+    marginTop: 10,
+    color: "#111111",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+  kpiSub: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  metricsRow: {
+    marginTop: 18,
+    flexDirection: "row",
+    gap: 12,
+  },
+  metricWide: {
+    flex: 1.2,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+  },
+  metricSmall: {
+    flex: 0.8,
+    backgroundColor: "#f7f8fa",
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+    justifyContent: "center",
+  },
+  metricBig: {
+    marginTop: 10,
+    color: "#111111",
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "900",
+  },
+  track: {
+    marginTop: 12,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "#e8edf5",
+    overflow: "hidden",
+  },
+  fill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#1864d9",
+  },
+  metricSmallLabel: {
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  metricSmallValue: {
+    marginTop: 10,
+    color: "#111111",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+  metricSmallSub: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  questionCard: {
+    marginTop: 18,
+    backgroundColor: "#ffffff",
+    borderRadius: 28,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+  },
+  questionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  questionLabel: {
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  questionTag: {
+    backgroundColor: "#f7f8fa",
+    borderWidth: 1,
+    borderColor: "#eceff4",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  questionTagText: {
+    color: "#344054",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  questionText: {
+    marginTop: 12,
+    color: "#111111",
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
+  playButton: {
+    marginTop: 16,
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: "#111111",
+    borderWidth: 1,
+    borderColor: "#111111",
+    alignItems: "center",
+  },
+  playButtonText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  playButtonSub: {
+    marginTop: 4,
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  choiceList: {
+    marginTop: 14,
+    gap: 12,
+  },
+  choiceCard: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e7ebf2",
+    backgroundColor: "#ffffff",
+  },
+  choiceCardText: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  choiceCardCorrect: {
+    borderColor: "#1864d9",
+    backgroundColor: "#f5faff",
+  },
+  choiceCardDim: {
+    opacity: 0.65,
+  },
+
+  controlsCard: {
+    marginTop: 18,
+    backgroundColor: "#f7f8fa",
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#eceff4",
+  },
+  controlRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 12,
+  },
+  modeButton: {
+    flex: 1,
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e7ebf2",
+  },
+  modeButtonText: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  modeButtonSub: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  resetButton: {
+    width: 120,
+    borderRadius: 22,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e7ebf2",
+  },
+  resetButtonText: {
+    color: "#111111",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.55,
+  },
+
+  pressDown: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
+  },
 });
