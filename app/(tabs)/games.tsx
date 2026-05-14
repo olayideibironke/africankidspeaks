@@ -1,1566 +1,833 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  Pressable,
+  Alert,
   Animated,
+  Pressable,
   StyleSheet,
-  ScrollView,
+  View,
 } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as speech from "expo-speech";
 import * as haptics from "expo-haptics";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
-import { colors } from "../theme";
-import ParentGateModal from "../components/parentgate.modal";
+import { palette } from "../theme/palette";
+import { colors, lang as langTheme, type LangKey } from "../theme/colors";
+import { spacing } from "../theme/spacing";
+import { radii } from "../theme/radii";
+import { shadows } from "../theme/shadows";
+import { duration, easing, pressScale } from "../theme/motion";
+
+import { Text } from "../components/ui/Text";
+import { Pill } from "../components/ui/Pill";
+import { AudioButton } from "../components/ui/AudioButton";
+import { ProgressBar } from "../components/ui/ProgressBar";
+import { Mascot } from "../components/illustrations/Mascot";
+import { PatternBackdrop } from "../components/illustrations/PatternBackdrop";
+
 import { flashcards } from "../data/flashcards";
-import { getsettings, type settings } from "../utils/settings";
-import { playWordAudio, type AudioLang } from "../utils/play-word-audio";
+import { playWordAudio } from "../utils/play-word-audio";
+import { getDefaultLang } from "../hooks/useOnboarding";
+import ParentGateModal from "../components/parentgate.modal";
 
 type Mode = "sound" | "match";
 type Difficulty = "easy" | "normal" | "hard";
 
-const score_key = "games_soundquiz_score_v1";
-const streak_key = "games_soundquiz_streak_v1";
-
-const adaptive_key = (lang: AudioLang, mode: Mode) =>
+const SCORE_KEY = "games_soundquiz_score_v1";
+const STREAK_KEY = "games_soundquiz_streak_v1";
+const ADAPTIVE_KEY = (lang: LangKey, mode: Mode) =>
   `games_adaptive_v1_${lang}_${mode}`;
 const ADAPTIVE_WINDOW = 20;
 
-function shuffle<T>(arr: T[]) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
+const LANG_LABELS: Record<LangKey, string> = {
+  yo: "Yoruba",
+  ig: "Igbo",
+  pg: "Pidgin",
+};
+const TTS_LANG: Record<LangKey, string> = {
+  yo: "yo-NG",
+  ig: "ig-NG",
+  pg: "en-NG",
+};
+
+function shuffle<T>(a: T[]): T[] {
+  const r = [...a];
+  for (let i = r.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [r[i], r[j]] = [r[j], r[i]];
   }
-  return a;
+  return r;
 }
 
-function pickN<T>(arr: T[], n: number) {
-  return shuffle(arr).slice(0, n);
+function pickN<T>(a: T[], n: number): T[] {
+  return shuffle(a).slice(0, n);
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function computeLevelFromStreak(streak: number) {
+function computeLevel(streak: number) {
   if (streak >= 20) return 5;
   if (streak >= 14) return 4;
   if (streak >= 9) return 3;
   if (streak >= 5) return 2;
   return 1;
 }
-
-function difficultyForLevel(level: number): Difficulty {
-  if (level >= 4) return "hard";
-  if (level >= 2) return "normal";
+function difficultyForLevel(l: number): Difficulty {
+  if (l >= 4) return "hard";
+  if (l >= 2) return "normal";
   return "easy";
 }
-
 function choicesCount(d: Difficulty) {
   if (d === "hard") return 6;
   if (d === "normal") return 4;
   return 3;
 }
-
-function difficultyStepUp(d: Difficulty): Difficulty {
-  if (d === "easy") return "normal";
-  if (d === "normal") return "hard";
-  return "hard";
+function stepUp(d: Difficulty): Difficulty {
+  return d === "easy" ? "normal" : "hard";
+}
+function stepDown(d: Difficulty): Difficulty {
+  return d === "hard" ? "normal" : "easy";
 }
 
-function difficultyStepDown(d: Difficulty): Difficulty {
-  if (d === "hard") return "normal";
-  if (d === "normal") return "easy";
-  return "easy";
+function isPlaceholder(s: string) {
+  return /^word_\d+$/i.test(String(s ?? ""));
+}
+function prettyWord(raw: string, id: number) {
+  return isPlaceholder(raw) ? `Word ${id}` : String(raw ?? "");
 }
 
 function parseBoolArray(raw: string | null): boolean[] {
   if (!raw) return [];
   try {
     const v = JSON.parse(raw);
-    if (!Array.isArray(v)) return [];
-    return v.map((x) => !!x);
+    return Array.isArray(v) ? v.map((x) => !!x) : [];
   } catch {
     return [];
   }
 }
 
-function isPlaceholderWord(raw: string) {
-  return /^word_\d+$/i.test(String(raw ?? ""));
-}
-
-function prettyWordLabel(raw: string, id: number) {
-  const s = String(raw ?? "");
-  if (isPlaceholderWord(s)) return `Word ${id}`;
-  return s;
-}
-
-function safeTTSTextForSoundQuiz(tr: string, id: number) {
-  const s = String(tr ?? "").trim();
-  if (s) return s;
-  return `Audio missing ${id}`;
-}
-
-function titleForLang(lang: AudioLang) {
-  if (lang === "yo") return "Yoruba";
-  if (lang === "ig") return "Igbo";
-  return "Pidgin";
-}
-
-function shortForLang(lang: AudioLang) {
-  if (lang === "yo") return "YO";
-  if (lang === "ig") return "IG";
-  return "PG";
-}
-
-function themeForLang(lang: AudioLang) {
-  if (lang === "yo") {
-    return {
-      page: "#73D7FF",
-      hero: "#6f5cff",
-      heroSoft: "#eee9ff",
-      accent: "#ff9f43",
-      accentDark: "#ef7e1a",
-      pill: "#7f6cff",
-      pillSoft: "#f2efff",
-      text: "#2d2355",
-      muted: "#7c7599",
-      card: "#ffffff",
-      cardAlt: "#fff3d6",
-      cardAltBorder: "#ffd98a",
-      correct: "#e8fff4",
-      correctBorder: "#53d396",
-      orbA: "#ffd76e",
-      orbB: "#9bdfff",
-      orbC: "#ff9ac8",
-      mascot: "🦁",
-      ribbon: "#6f5cff",
-      ribbonDark: "#5440ea",
-      ribbonSoft: "#eee9ff",
-    };
-  }
-
-  if (lang === "ig") {
-    return {
-      page: "#73D7FF",
-      hero: "#13ae73",
-      heroSoft: "#e7fff3",
-      accent: "#19b67b",
-      accentDark: "#0d8f5e",
-      pill: "#12a56d",
-      pillSoft: "#e9fff3",
-      text: "#17392d",
-      muted: "#5d8071",
-      card: "#ffffff",
-      cardAlt: "#ecfff5",
-      cardAltBorder: "#98e4be",
-      correct: "#eafff3",
-      correctBorder: "#48c888",
-      orbA: "#9cf0c1",
-      orbB: "#ffe07e",
-      orbC: "#9ad8ff",
-      mascot: "🌟",
-      ribbon: "#19b67b",
-      ribbonDark: "#0e965f",
-      ribbonSoft: "#e9fff3",
-    };
-  }
-
-  return {
-    page: "#73D7FF",
-    hero: "#ff6f61",
-    heroSoft: "#fff0eb",
-    accent: "#ff7f50",
-    accentDark: "#e85d37",
-    pill: "#ff826b",
-    pillSoft: "#fff0eb",
-    text: "#522c2a",
-    muted: "#8d6a69",
-    card: "#ffffff",
-    cardAlt: "#fff1e8",
-    cardAltBorder: "#ffcba8",
-    correct: "#fff7db",
-    correctBorder: "#ffc85f",
-    orbA: "#ffc190",
-    orbB: "#9bdfff",
-    orbC: "#ff9fc0",
-    mascot: "🦜",
-    ribbon: "#ff7f50",
-    ribbonDark: "#e25f31",
-    ribbonSoft: "#fff0e8",
-  };
-}
-
 export default function GamesScreen() {
-  const params = useLocalSearchParams<{ lang?: string }>();
-  const initialLang = (params.lang as AudioLang) || "yo";
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ lang?: string }>();
 
-  const [lang, setLang] = useState<AudioLang>(initialLang);
+  const [lang, setLang] = useState<LangKey>("yo");
   const [mode, setMode] = useState<Mode>("sound");
-
-  const [gateOpen, setGateOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<null | (() => void)>(null);
-
-  const [settingsState, setSettingsState] = useState<settings | null>(null);
-
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [attempts, setAttempts] = useState(0);
   const [correct, setCorrect] = useState(0);
+  const [recent, setRecent] = useState<boolean[]>([]);
 
   const [questionId, setQuestionId] = useState<number>(
-    () => (flashcards as any[])[0]?.id ?? 1
+    () => Number((flashcards as readonly any[])[0]?.id ?? 1)
   );
   const [choices, setChoices] = useState<any[]>([]);
   const [locked, setLocked] = useState(false);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
+  const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
 
-  const [recentResults, setRecentResults] = useState<boolean[]>([]);
-
-  const sparkleAnim = useRef(new Animated.Value(0)).current;
-  const confettiAnim = useRef(new Animated.Value(0)).current;
-  const badgeAnim = useRef(new Animated.Value(0)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-  const [feedbackText, setFeedbackText] = useState<string>("");
+  const feedbackAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const p = params.lang as string | undefined;
-    if (p === "yo" || p === "ig" || p === "pg") setLang(p);
+    (async () => {
+      const p = params.lang;
+      if (p === "yo" || p === "ig" || p === "pg") setLang(p);
+      else setLang(await getDefaultLang());
+    })();
   }, [params.lang]);
 
-  useEffect(() => {
-    const floatLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: 1,
-          duration: 2400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 2400,
-          useNativeDriver: true,
-        }),
-      ])
-    );
+  const accent = langTheme[lang];
 
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 1600,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    floatLoop.start();
-    pulseLoop.start();
-
-    return () => {
-      floatLoop.stop();
-      pulseLoop.stop();
-    };
-  }, [floatAnim, pulseAnim]);
-
-  const level = useMemo(() => computeLevelFromStreak(streak), [streak]);
-  const baseDifficulty = useMemo(() => difficultyForLevel(level), [level]);
-  const theme = useMemo(() => themeForLang(lang), [lang]);
+  const level = useMemo(() => computeLevel(streak), [streak]);
+  const baseDiff = useMemo(() => difficultyForLevel(level), [level]);
+  const recentAcc = useMemo(() => {
+    if (!recent.length) return 0;
+    return Math.round((recent.filter(Boolean).length / recent.length) * 100);
+  }, [recent]);
+  const difficulty = useMemo<Difficulty>(() => {
+    if (recent.length < 8) return baseDiff;
+    if (recentAcc >= 85) return stepUp(baseDiff);
+    if (recentAcc <= 55) return stepDown(baseDiff);
+    return baseDiff;
+  }, [baseDiff, recent.length, recentAcc]);
 
   const accuracy = useMemo(() => {
     if (attempts <= 0) return 0;
     return Math.round((correct / attempts) * 100);
   }, [attempts, correct]);
 
-  const recentAccuracy = useMemo(() => {
-    if (!recentResults.length) return 0;
-    const c = recentResults.filter(Boolean).length;
-    return Math.round((c / recentResults.length) * 100);
-  }, [recentResults]);
-
-  const difficulty = useMemo((): Difficulty => {
-    if (recentResults.length < 8) return baseDifficulty;
-    if (recentAccuracy >= 85) return difficultyStepUp(baseDifficulty);
-    if (recentAccuracy <= 55) return difficultyStepDown(baseDifficulty);
-    return baseDifficulty;
-  }, [baseDifficulty, recentResults.length, recentAccuracy]);
-
   const current = useMemo(() => {
-    const c =
-      (flashcards as any[]).find((x) => x.id === questionId) ??
-      (flashcards as any[])[0];
-    return c;
+    return (
+      (flashcards as readonly any[]).find((x) => Number(x.id) === questionId) ??
+      (flashcards as readonly any[])[0]
+    );
   }, [questionId]);
 
-  const currentId = Number((current as any)?.id ?? questionId);
-
-  const questionWordEn = useMemo(() => {
-    const raw = String((current as any)?.en ?? "");
-    return prettyWordLabel(raw, currentId);
-  }, [current, currentId]);
-
-  const targetTr = useMemo(() => {
-    return String((current as any)?.[lang] ?? "").trim();
-  }, [current, lang]);
+  const questionEn = useMemo(
+    () => prettyWord(String(current?.en ?? ""), Number(current?.id ?? questionId)),
+    [current, questionId]
+  );
+  const targetTr = String(current?.[lang] ?? "").trim();
 
   const loadStats = useCallback(async () => {
     try {
-      const s = await AsyncStorage.getItem(score_key);
-      const st = await AsyncStorage.getItem(streak_key);
+      const s = await AsyncStorage.getItem(SCORE_KEY);
+      const st = await AsyncStorage.getItem(STREAK_KEY);
       if (s) setScore(parseInt(s, 10) || 0);
       if (st) setStreak(parseInt(st, 10) || 0);
     } catch {}
   }, []);
 
-  const saveStats = useCallback(async (nextScore: number, nextStreak: number) => {
+  const saveStats = useCallback(async (s: number, st: number) => {
     try {
-      await AsyncStorage.setItem(score_key, String(nextScore));
-      await AsyncStorage.setItem(streak_key, String(nextStreak));
+      await AsyncStorage.setItem(SCORE_KEY, String(s));
+      await AsyncStorage.setItem(STREAK_KEY, String(st));
     } catch {}
   }, []);
 
-  const loadAdaptive = useCallback(async (l: AudioLang, m: Mode) => {
+  const loadAdaptive = useCallback(async (l: LangKey, m: Mode) => {
     try {
-      const raw = await AsyncStorage.getItem(adaptive_key(l, m));
-      setRecentResults(parseBoolArray(raw).slice(-ADAPTIVE_WINDOW));
+      const raw = await AsyncStorage.getItem(ADAPTIVE_KEY(l, m));
+      setRecent(parseBoolArray(raw).slice(-ADAPTIVE_WINDOW));
     } catch {
-      setRecentResults([]);
+      setRecent([]);
     }
   }, []);
 
-  const saveAdaptive = useCallback(async (l: AudioLang, m: Mode, arr: boolean[]) => {
-    try {
-      await AsyncStorage.setItem(
-        adaptive_key(l, m),
-        JSON.stringify(arr.slice(-ADAPTIVE_WINDOW))
-      );
-    } catch {}
-  }, []);
-
-  const pushAdaptiveResult = useCallback(
-    async (isCorrect: boolean) => {
-      setRecentResults((prev) => {
-        const next = [...prev, isCorrect].slice(-ADAPTIVE_WINDOW);
-        saveAdaptive(lang, mode, next);
-        return next;
-      });
+  const saveAdaptive = useCallback(
+    async (l: LangKey, m: Mode, arr: boolean[]) => {
+      try {
+        await AsyncStorage.setItem(
+          ADAPTIVE_KEY(l, m),
+          JSON.stringify(arr.slice(-ADAPTIVE_WINDOW))
+        );
+      } catch {}
     },
-    [lang, mode, saveAdaptive]
+    []
   );
 
-  const stopAudio = useCallback(async () => {
-    try {
-      speech.stop();
-    } catch {}
-  }, []);
-
-  const primeQuestion = useCallback(() => {
-    const cnt = choicesCount(difficulty);
-    const picked = pickN(
-      flashcards as any[],
-      clamp(cnt, 3, (flashcards as any[]).length)
-    );
-    const hasCurrent = picked.some((x) => x.id === (current as any)?.id);
-    const finalChoices = hasCurrent
-      ? picked
-      : shuffle([current, ...picked]).slice(0, cnt);
-
-    setChoices(shuffle(finalChoices));
-    setLocked(false);
-  }, [difficulty, current]);
-
-  const nextQuestion = useCallback(() => {
-    const next =
-      (flashcards as any[])[
-        Math.floor(Math.random() * (flashcards as any[]).length)
-      ];
-    setQuestionId(next.id);
-  }, []);
-
   useEffect(() => {
-    primeQuestion();
-  }, [questionId, lang, mode, difficulty, primeQuestion]);
+    loadStats();
+  }, [loadStats]);
 
   useEffect(() => {
     loadAdaptive(lang, mode);
   }, [lang, mode, loadAdaptive]);
 
+  const prime = useCallback(() => {
+    const cnt = choicesCount(difficulty);
+    const all = flashcards as readonly any[];
+    const candidates = all.filter((c) => {
+      const tr = String((c as any)?.[lang] ?? "").trim();
+      return tr.length > 0 && !isPlaceholder(tr);
+    });
+    if (candidates.length === 0) return;
+
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    const others = candidates.filter((c) => Number(c.id) !== Number(target.id));
+    const distractors = pickN(others, cnt - 1);
+    const pool = shuffle([target, ...distractors]);
+
+    setQuestionId(Number(target.id));
+    setChoices(pool);
+    setPicked(null);
+    setLocked(false);
+    setFeedback(null);
+  }, [difficulty, lang]);
+
   useFocusEffect(
     useCallback(() => {
-      loadStats();
-      (async () => {
-        try {
-          const s = await getsettings();
-          setSettingsState(s);
-        } catch {}
-      })();
-
+      prime();
       return () => {
-        stopAudio();
-      };
-    }, [loadStats, stopAudio])
-  );
-
-  const runGoodFeedback = useCallback(
-    (text: string) => {
-      setFeedbackText(text);
-      sparkleAnim.setValue(0);
-      badgeAnim.setValue(0);
-
-      Animated.parallel([
-        Animated.timing(sparkleAnim, {
-          toValue: 1,
-          duration: 650,
-          useNativeDriver: true,
-        }),
-        Animated.sequence([
-          Animated.timing(badgeAnim, {
-            toValue: 1,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-          Animated.delay(900),
-          Animated.timing(badgeAnim, {
-            toValue: 0,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start(() => {
-        sparkleAnim.setValue(0);
-      });
-    },
-    [sparkleAnim, badgeAnim]
-  );
-
-  const runConfetti = useCallback(() => {
-    confettiAnim.setValue(0);
-    Animated.timing(confettiAnim, {
-      toValue: 1,
-      duration: 900,
-      useNativeDriver: true,
-    }).start(() => {
-      Animated.timing(confettiAnim, {
-        toValue: 0,
-        duration: 350,
-        useNativeDriver: true,
-      }).start();
-    });
-  }, [confettiAnim]);
-
-  const gated = useCallback(
-    (fn: () => void) => {
-      const gateEnabled = settingsState
-        ? !!(settingsState as any).parent_gate
-        : true;
-
-      if (!gateEnabled) {
-        fn();
-        return;
-      }
-
-      setPendingAction(() => fn);
-      setGateOpen(true);
-    },
-    [settingsState]
-  );
-
-  const playQuestionAudio = useCallback(async () => {
-    await stopAudio();
-
-    const ttsText =
-      mode === "sound"
-        ? safeTTSTextForSoundQuiz(targetTr, currentId)
-        : safeTTSTextForSoundQuiz(targetTr, currentId);
-
-    const ttsLang = lang === "yo" ? "yo-NG" : lang === "ig" ? "ig-NG" : "en-NG";
-    const rate = lang === "pg" ? 0.95 : 0.85;
-
-    await playWordAudio({
-      lang,
-      id: currentId,
-      ttsText,
-      ttsLang,
-      rate,
-    });
-  }, [stopAudio, mode, targetTr, currentId, lang]);
-
-  const onPick = useCallback(
-    async (picked: any) => {
-      if (locked) return;
-      setLocked(true);
-
-      const isCorrect = picked?.id === (current as any)?.id;
-
-      setAttempts((a) => a + 1);
-      if (isCorrect) setCorrect((c) => c + 1);
-
-      pushAdaptiveResult(isCorrect);
-
-      if (settingsState?.haptics !== false) {
         try {
-          await haptics.notificationAsync(
-            isCorrect
-              ? (haptics.NotificationFeedbackType as any).Success
-              : (haptics.NotificationFeedbackType as any).Error
-          );
+          speech.stop();
         } catch {}
-      }
-
-      if (isCorrect) {
-        const nextScore = score + 10;
-        const nextStreak = streak + 1;
-        setScore(nextScore);
-        setStreak(nextStreak);
-        await saveStats(nextScore, nextStreak);
-
-        runGoodFeedback("Correct ✅");
-
-        if (difficulty === "hard") runConfetti();
-
-        const prevLevel = computeLevelFromStreak(streak);
-        const nextLevel = computeLevelFromStreak(nextStreak);
-        if (nextLevel > prevLevel) {
-          runGoodFeedback(`Level ${nextLevel} 🎉`);
-          runConfetti();
-        }
-
-        setTimeout(() => nextQuestion(), 450);
-      } else {
-        const nextStreak = 0;
-        setStreak(nextStreak);
-        await saveStats(score, nextStreak);
-        runGoodFeedback("Try again");
-        setTimeout(() => setLocked(false), 500);
-      }
-    },
-    [
-      locked,
-      current,
-      pushAdaptiveResult,
-      settingsState,
-      score,
-      streak,
-      saveStats,
-      runGoodFeedback,
-      runConfetti,
-      nextQuestion,
-      difficulty,
-    ]
+      };
+    }, [prime])
   );
 
-  const resetProgress = useCallback(async () => {
-    const doReset = async () => {
-      setScore(0);
-      setStreak(0);
-      setAttempts(0);
-      setCorrect(0);
-      setRecentResults([]);
-      setFeedbackText("");
+  useEffect(() => {
+    prime();
+  }, [lang, mode, prime]);
 
-      try {
-        await AsyncStorage.setItem(score_key, "0");
-        await AsyncStorage.setItem(streak_key, "0");
+  const playQuestion = useCallback(async () => {
+    setAudioPlaying(true);
+    try {
+      speech.stop();
+    } catch {}
+    try {
+      await playWordAudio({
+        lang,
+        id: Number(current?.id ?? questionId),
+        ttsText: targetTr || questionEn,
+        ttsLang: TTS_LANG[lang],
+        rate: lang === "pg" ? 0.95 : 0.85,
+      });
+    } catch {}
+    setTimeout(() => setAudioPlaying(false), 2200);
+  }, [lang, current, questionId, targetTr, questionEn]);
 
-        const langs: AudioLang[] = ["yo", "ig", "pg"];
-        const modes: Mode[] = ["sound", "match"];
-        await Promise.all(
-          langs.flatMap((l) =>
-            modes.map((m) => AsyncStorage.removeItem(adaptive_key(l, m)))
-          )
-        );
-      } catch {}
-    };
+  useEffect(() => {
+    if (mode === "sound") {
+      const t = setTimeout(() => {
+        playQuestion();
+      }, 400);
+      return () => clearTimeout(t);
+    }
+  }, [mode, questionId, playQuestion]);
 
-    gated(() => {
-      doReset();
+  const animateFeedback = (state: "correct" | "wrong") => {
+    setFeedback(state);
+    feedbackAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(feedbackAnim, {
+        toValue: 1,
+        duration: 280,
+        easing: easing.emphasized,
+        useNativeDriver: true,
+      }),
+      Animated.delay(state === "correct" ? 600 : 900),
+      Animated.timing(feedbackAnim, {
+        toValue: 0,
+        duration: 200,
+        easing: easing.standard,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setFeedback(null));
+  };
+
+  const handleChoice = async (choice: any) => {
+    if (locked) return;
+    setLocked(true);
+    setPicked(Number(choice.id));
+
+    const isCorrect = Number(choice.id) === Number(current?.id ?? questionId);
+    const nextAttempts = attempts + 1;
+    const nextCorrect = correct + (isCorrect ? 1 : 0);
+    const nextScore = isCorrect ? score + 10 + Math.floor(streak / 3) : score;
+    const nextStreak = isCorrect ? streak + 1 : 0;
+
+    setAttempts(nextAttempts);
+    setCorrect(nextCorrect);
+    setScore(nextScore);
+    setStreak(nextStreak);
+    saveStats(nextScore, nextStreak);
+
+    setRecent((prev) => {
+      const next = [...prev, isCorrect].slice(-ADAPTIVE_WINDOW);
+      saveAdaptive(lang, mode, next);
+      return next;
     });
-  }, [gated]);
 
-  const mascotBob = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -8],
-  });
+    try {
+      haptics.notificationAsync(
+        isCorrect
+          ? haptics.NotificationFeedbackType.Success
+          : haptics.NotificationFeedbackType.Warning
+      );
+    } catch {}
 
-  const mascotScale = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.05],
-  });
+    animateFeedback(isCorrect ? "correct" : "wrong");
 
-  const sparkleRise = sparkleAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [16, -10],
-  });
+    if (isCorrect && mode === "match") {
+      try {
+        await playWordAudio({
+          lang,
+          id: Number(choice.id),
+          ttsText: String(choice[lang] ?? ""),
+          ttsLang: TTS_LANG[lang],
+        });
+      } catch {}
+    }
+
+    setTimeout(
+      () => {
+        prime();
+      },
+      isCorrect ? 900 : 1200
+    );
+  };
+
+  const skip = () => {
+    setStreak(0);
+    saveStats(score, 0);
+    prime();
+  };
+
+  const resetStats = async () => {
+    setGateOpen(false);
+    setScore(0);
+    setStreak(0);
+    setAttempts(0);
+    setCorrect(0);
+    setRecent([]);
+    await saveStats(0, 0);
+    try {
+      await AsyncStorage.removeItem(ADAPTIVE_KEY(lang, mode));
+    } catch {}
+    Alert.alert("Reset", "Games progress cleared.");
+  };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.page }]}>
-      <View style={[styles.bgGlowTop, { backgroundColor: colors.primary }]} />
-      <View style={[styles.bgGlowRight, { backgroundColor: colors.sky }]} />
-      <View style={[styles.bgGlowBottom, { backgroundColor: colors.pink }]} />
-      <View style={styles.bgGlowCenter} />
+    <>
+      {gateOpen ? (
+        <ParentGateModal
+          visible={gateOpen}
+          onClose={() => setGateOpen(false)}
+          onCancel={() => setGateOpen(false)}
+          onSuccess={resetStats}
+          onPassed={resetStats}
+          title="parent gate"
+          subtitle="solve the math to reset games progress"
+        />
+      ) : null}
 
-      <View style={[styles.bgOrbTop, { backgroundColor: theme.orbA }]} />
-      <View style={[styles.bgOrbRight, { backgroundColor: theme.orbB }]} />
-      <View style={[styles.bgOrbBottom, { backgroundColor: theme.orbC }]} />
-
-      <Animated.View
-        pointerEvents="none"
+      <View
         style={[
-          styles.sparkleWrap,
-          {
-            opacity: sparkleAnim,
-            transform: [
-              { translateY: sparkleRise },
-              {
-                scale: sparkleAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.75, 1.18],
-                }),
-              },
-            ],
-          },
+          styles.root,
+          { backgroundColor: accent.surface, paddingTop: insets.top + spacing.sm },
         ]}
       >
-        <Text style={styles.sparkleText}>✨ Awesome! ✨</Text>
-      </Animated.View>
-
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.badgeWrap,
-          {
-            opacity: badgeAnim,
-            transform: [
-              {
-                translateY: badgeAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-14, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <View style={[styles.badgeCard, { backgroundColor: theme.accent }]}>
-          <Text style={styles.badgeText}>{feedbackText}</Text>
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          <PatternBackdrop
+            variant="adire-dots"
+            color={accent.primary}
+            width={520}
+            height={800}
+            opacity={0.1}
+          />
         </View>
-      </Animated.View>
 
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.confettiWrap,
-          {
-            opacity: confettiAnim,
-            transform: [
-              {
-                translateY: confettiAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-16, 38],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <Text style={styles.confettiText}>🎉 🎊 🌟 🎉</Text>
-      </Animated.View>
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => router.push("/(tabs)")}
+            style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}
+            hitSlop={8}
+          >
+            <Ionicons name="chevron-back" size={22} color={accent.primaryDeep} />
+          </Pressable>
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          {
-            paddingTop: insets.top + 10,
-            paddingBottom: insets.bottom + 36,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.headerRibbonRow}>
-          <View
+          <Pill
+            label={`${LANG_LABELS[lang]} · ${lang.toUpperCase()}`}
+            variant="solid"
+            bg={accent.primary}
+            color={palette.white}
+          />
+
+          <Pressable
+            onPress={() => setGateOpen(true)}
+            style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}
+            hitSlop={8}
+          >
+            <Ionicons name="refresh" size={22} color={accent.primaryDeep} />
+          </Pressable>
+        </View>
+
+        <View style={styles.modeTabs}>
+          <ModeTab
+            label="Sound"
+            icon="volume-high"
+            active={mode === "sound"}
+            accent={accent.primary}
+            accentDeep={accent.primaryDeep}
+            onPress={() => setMode("sound")}
+          />
+          <ModeTab
+            label="Match"
+            icon="git-compare"
+            active={mode === "match"}
+            accent={accent.primary}
+            accentDeep={accent.primaryDeep}
+            onPress={() => setMode("match")}
+          />
+        </View>
+
+        <View style={styles.statsRow}>
+          <StatChip icon="trophy" label="Score" value={String(score)} accent={accent.primary} />
+          <StatChip icon="flame" label="Streak" value={String(streak)} accent={palette.clay} />
+          <StatChip
+            icon="speedometer"
+            label="Accuracy"
+            value={`${accuracy}%`}
+            accent={palette.mint}
+          />
+        </View>
+
+        <View style={styles.questionWrap}>
+          {mode === "sound" ? (
+            <View style={[styles.questionCard, shadows.lg]}>
+              <Text variant="overline" tone="muted">Listen</Text>
+              <View style={{ height: spacing.md }} />
+              <AudioButton
+                onPress={playQuestion}
+                playing={audioPlaying}
+                tint={accent.primary}
+                size={92}
+              />
+              <View style={{ height: spacing.md }} />
+              <Text variant="caption" tone="soft" align="center">
+                Tap the speaker to hear the word again.{"\n"}Then pick what you heard.
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.questionCard, shadows.lg]}>
+              <Text variant="overline" tone="muted">Pick the {LANG_LABELS[lang]} word for</Text>
+              <Text variant="display3" align="center" style={{ marginTop: spacing.sm }}>
+                {questionEn}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.choicesGrid}>
+          {choices.map((c) => (
+            <ChoiceCard
+              key={c.id}
+              choice={c}
+              lang={lang}
+              mode={mode}
+              correctId={Number(current?.id ?? questionId)}
+              picked={picked}
+              locked={locked}
+              accent={accent.primary}
+              onPress={() => handleChoice(c)}
+            />
+          ))}
+        </View>
+
+        <View style={[styles.bottomRow, { paddingBottom: insets.bottom + 100 }]}>
+          <Pressable
+            onPress={skip}
+            style={({ pressed }) => [
+              styles.skipBtn,
+              { backgroundColor: palette.white },
+              pressed && { transform: [{ scale: pressScale.medium }] },
+            ]}
+            disabled={locked}
+          >
+            <Ionicons name="play-skip-forward" size={18} color={accent.primaryDeep} />
+            <Text
+              variant="button"
+              style={{ color: accent.primaryDeep, marginLeft: spacing.xs }}
+            >
+              Skip
+            </Text>
+          </Pressable>
+        </View>
+
+        {feedback ? (
+          <Animated.View
+            pointerEvents="none"
             style={[
-              styles.headerRibbon,
+              styles.feedbackOverlay,
               {
-                backgroundColor: theme.ribbonSoft,
-                borderColor: theme.ribbon,
+                opacity: feedbackAnim,
+                transform: [
+                  {
+                    scale: feedbackAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.7, 1.05],
+                    }),
+                  },
+                ],
               },
             ]}
           >
             <View
               style={[
-                styles.headerRibbonCap,
-                { backgroundColor: theme.ribbonDark },
-              ]}
-            />
-            <Text style={[styles.headerRibbonEmoji, { color: theme.ribbonDark }]}>
-              🎮
-            </Text>
-            <Text style={[styles.headerRibbonText, { color: theme.ribbonDark }]}>
-              games
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.hero, { backgroundColor: theme.hero }]}>
-          <View style={[styles.heroBubbleOne, { backgroundColor: theme.orbA }]} />
-          <View style={[styles.heroBubbleTwo, { backgroundColor: theme.orbB }]} />
-          <View style={[styles.heroBubbleThree, { backgroundColor: theme.orbC }]} />
-
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroTextWrap}>
-              <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeText}>{titleForLang(lang)}</Text>
-              </View>
-
-              <Text style={styles.heroTitle}>Play and learn</Text>
-              <Text style={styles.heroSubtitle}>
-                Listen, tap, and grow your word power with quick colorful rounds.
-              </Text>
-            </View>
-
-            <Animated.View
-              style={[
-                styles.heroMascotWrap,
+                styles.feedbackChip,
                 {
-                  transform: [{ translateY: mascotBob }, { scale: mascotScale }],
+                  backgroundColor:
+                    feedback === "correct" ? palette.mint : palette.clay,
                 },
               ]}
             >
-              <Text style={styles.heroMascot}>{theme.mascot}</Text>
-            </Animated.View>
-          </View>
-
-          <View style={styles.heroMetaRow}>
-            <View style={styles.heroModeCard}>
-              <Text style={styles.heroModeValue}>
-                {mode === "sound" ? "Sound" : "Match"}
-              </Text>
-              <Text style={styles.heroModeLabel}>mode</Text>
-            </View>
-
-            <View style={styles.heroModeCard}>
-              <Text style={styles.heroModeValue}>{difficulty.toUpperCase()}</Text>
-              <Text style={styles.heroModeLabel}>level</Text>
-            </View>
-
-            <View style={styles.heroModeCard}>
-              <Text style={styles.heroModeValue}>
-                {recentResults.length ? `${recentAccuracy}%` : "New"}
-              </Text>
-              <Text style={styles.heroModeLabel}>recent</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.langSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Pick a language</Text>
-            <Text style={styles.sectionHint}>Switch anytime</Text>
-          </View>
-
-          <View style={styles.langRow}>
-            {(["yo", "ig", "pg"] as AudioLang[]).map((k) => {
-              const selected = k === lang;
-              return (
-                <Pressable
-                  key={k}
-                  onPress={() => setLang(k)}
-                  style={({ pressed }) => [
-                    styles.langPill,
-                    {
-                      backgroundColor: "#ffffff",
-                      borderColor: "#ffffff",
-                    },
-                    selected && {
-                      backgroundColor: theme.pill,
-                      borderColor: theme.pill,
-                    },
-                    pressed && styles.pressDown,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      { color: selected ? "#ffffff" : theme.text },
-                    ]}
-                  >
-                    {shortForLang(k)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.langPillSub,
-                      { color: selected ? "rgba(255,255,255,0.82)" : theme.muted },
-                    ]}
-                  >
-                    {k === "yo" ? "Yoruba" : k === "ig" ? "Igbo" : "Pidgin"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.kpiRow}>
-          <View style={[styles.kpiCardBig, { backgroundColor: theme.accent }]}>
-            <Text style={styles.kpiBigLabel}>Score</Text>
-            <Text style={styles.kpiBigValue}>{score}</Text>
-            <Text style={styles.kpiBigSub}>Keep the fun going</Text>
-          </View>
-
-          <View style={[styles.kpiCard, { backgroundColor: theme.heroSoft }]}>
-            <Text style={[styles.kpiLabel, { color: theme.muted }]}>Level</Text>
-            <Text style={[styles.kpiValue, { color: theme.text }]}>{level}</Text>
-            <Text style={[styles.kpiSub, { color: theme.muted }]}>
-              {difficulty.toUpperCase()}
-            </Text>
-          </View>
-
-          <View style={[styles.kpiCard, { backgroundColor: "#ffffff" }]}>
-            <Text style={[styles.kpiLabel, { color: theme.muted }]}>Streak</Text>
-            <Text style={[styles.kpiValue, { color: theme.text }]}>{streak}</Text>
-            <Text style={[styles.kpiSub, { color: theme.muted }]}>best run</Text>
-          </View>
-        </View>
-
-        <View style={styles.metricsRow}>
-          <View style={[styles.metricWide, { backgroundColor: "#ffffff" }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.metricTitle}>Accuracy</Text>
-              <Text style={styles.metricHint}>
-                {correct}/{attempts || 0}
-              </Text>
-            </View>
-
-            <Text style={[styles.metricBig, { color: theme.text }]}>{accuracy}%</Text>
-
-            <View style={styles.track}>
-              <View
-                style={[
-                  styles.fill,
-                  {
-                    width: `${clamp(accuracy, 0, 100)}%`,
-                    backgroundColor: theme.pill,
-                  },
-                ]}
+              <Ionicons
+                name={feedback === "correct" ? "checkmark-circle" : "close-circle"}
+                size={28}
+                color={palette.white}
               />
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.metricSmall,
-              { backgroundColor: theme.cardAlt, borderColor: theme.cardAltBorder },
-            ]}
-          >
-            <Text style={[styles.metricSmallLabel, { color: theme.muted }]}>Window</Text>
-            <Text style={[styles.metricSmallValue, { color: theme.text }]}>
-              {recentResults.length ? `${recentAccuracy}%` : "—"}
-            </Text>
-            <Text style={[styles.metricSmallSub, { color: theme.muted }]}>
-              {recentResults.length}/{ADAPTIVE_WINDOW}
-            </Text>
-          </View>
-        </View>
-
-        <View
-          style={[
-            styles.questionCard,
-            { backgroundColor: theme.cardAlt, borderColor: theme.cardAltBorder },
-          ]}
-        >
-          <View style={styles.questionHeader}>
-            <View>
-              <Text style={[styles.questionLabel, { color: theme.muted }]}>Round</Text>
-              <Text style={[styles.questionText, { color: theme.text }]}>
-                {mode === "sound"
-                  ? "Listen and pick the English word"
-                  : "Match the translation"}
+              <Text variant="title" style={{ color: palette.white, marginLeft: 8 }}>
+                {feedback === "correct" ? "Nice one" : "Try again"}
               </Text>
             </View>
+          </Animated.View>
+        ) : null}
+      </View>
+    </>
+  );
+}
 
-            <View style={[styles.questionTag, { backgroundColor: "#ffffff" }]}>
-              <Text style={[styles.questionTagText, { color: theme.text }]}>
-                {mode === "sound" ? "Sound quiz" : "Match mode"}
-              </Text>
-            </View>
-          </View>
+function ModeTab({
+  label,
+  icon,
+  active,
+  accent,
+  accentDeep,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  accent: string;
+  accentDeep: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.modeTab,
+        {
+          backgroundColor: active ? accent : palette.white,
+        },
+        pressed && { transform: [{ scale: pressScale.light }] },
+      ]}
+    >
+      <Ionicons name={icon} size={16} color={active ? palette.white : accentDeep} />
+      <Text
+        variant="button"
+        style={{ color: active ? palette.white : accentDeep, marginLeft: 6 }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
-          <Pressable
-            onPress={playQuestionAudio}
-            style={({ pressed }) => [
-              styles.playButton,
-              {
-                backgroundColor: theme.hero,
-                borderColor: theme.hero,
-              },
-              pressed && styles.pressDown,
-            ]}
-          >
-            <Text style={styles.playButtonEmoji}>🔊</Text>
-            <Text style={styles.playButtonText}>Play sound</Text>
-            <Text style={styles.playButtonSub}>
-              {mode === "sound" ? "Hear the word, then choose" : `Target: ${questionWordEn}`}
-            </Text>
-          </Pressable>
-
-          <View style={styles.choiceList}>
-            {choices.map((c) => {
-              const id = Number((c as any)?.id ?? 0);
-              const rawEn = String((c as any)?.en ?? "");
-
-              const label =
-                mode === "sound"
-                  ? prettyWordLabel(rawEn, id)
-                  : String((c as any)?.[lang] ?? "");
-
-              const isCorrect = c?.id === (current as any)?.id;
-
-              return (
-                <Pressable
-                  key={c.id}
-                  disabled={locked}
-                  onPress={() => onPick(c)}
-                  style={({ pressed }) => [
-                    styles.choiceCard,
-                    {
-                      backgroundColor: "#ffffff",
-                      borderColor: "#ffffff",
-                    },
-                    locked &&
-                      isCorrect && {
-                        backgroundColor: theme.correct,
-                        borderColor: theme.correctBorder,
-                      },
-                    locked && !isCorrect && styles.choiceCardDim,
-                    pressed && !locked && styles.pressDown,
-                  ]}
-                >
-                  <Text style={styles.choiceEmoji}>
-                    {mode === "sound" ? "🎯" : "🧩"}
-                  </Text>
-                  <Text style={[styles.choiceCardText, { color: theme.text }]}>{label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={[styles.controlsCard, { backgroundColor: theme.heroSoft }]}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Game tools</Text>
-            <Text style={styles.sectionHint}>Round controls</Text>
-          </View>
-
-          <View style={styles.controlRow}>
-            <Pressable
-              disabled={locked}
-              onPress={() => setMode((m) => (m === "sound" ? "match" : "sound"))}
-              style={({ pressed }) => [
-                styles.modeButton,
-                {
-                  backgroundColor: "#ffffff",
-                  borderColor: "#ffffff",
-                },
-                locked && styles.disabledButton,
-                pressed && !locked && styles.pressDown,
-              ]}
-            >
-              <Text style={[styles.modeButtonText, { color: theme.text }]}>
-                Mode: {mode === "sound" ? "Sound Quiz" : "Match"}
-              </Text>
-              <Text style={[styles.modeButtonSub, { color: theme.muted }]}>
-                {locked ? "Finish this question" : "Tap to switch"}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={resetProgress}
-              style={({ pressed }) => [
-                styles.resetButton,
-                {
-                  backgroundColor: "#ffffff",
-                  borderColor: "#ffffff",
-                },
-                pressed && styles.pressDown,
-              ]}
-            >
-              <Text style={[styles.resetButtonText, { color: theme.text }]}>Reset</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={{ height: 28 }} />
-      </ScrollView>
-
-      <ParentGateModal
-        visible={gateOpen}
-        onClose={() => setGateOpen(false)}
-        onSuccess={() => {
-          setGateOpen(false);
-          if (pendingAction) pendingAction();
-          setPendingAction(null);
-        }}
-      />
+function StatChip({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <View style={[styles.statChip, shadows.xs]}>
+      <View style={[styles.statIcon, { backgroundColor: accent }]}>
+        <Ionicons name={icon} size={14} color={palette.white} />
+      </View>
+      <View>
+        <Text variant="overline" tone="muted" style={{ fontSize: 9 }}>
+          {label}
+        </Text>
+        <Text variant="bodyStrong">{value}</Text>
+      </View>
     </View>
   );
 }
 
+function ChoiceCard({
+  choice,
+  lang,
+  mode,
+  correctId,
+  picked,
+  locked,
+  accent,
+  onPress,
+}: {
+  choice: any;
+  lang: LangKey;
+  mode: Mode;
+  correctId: number;
+  picked: number | null;
+  locked: boolean;
+  accent: string;
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animate = (to: number) =>
+    Animated.timing(scale, {
+      toValue: to,
+      duration: duration.fast,
+      easing: easing.standard,
+      useNativeDriver: true,
+    }).start();
+
+  const id = Number(choice.id);
+  const isPicked = picked === id;
+  const isCorrect = id === correctId;
+
+  let bg: string = palette.white;
+  let border: string = palette.hairline;
+  let fg: string = palette.ink;
+
+  if (locked && isCorrect) {
+    bg = palette.mint;
+    border = palette.mintDeep;
+    fg = palette.white;
+  } else if (locked && isPicked && !isCorrect) {
+    bg = palette.clay;
+    border = palette.clayDeep;
+    fg = palette.white;
+  }
+
+  const en = prettyWord(String(choice.en ?? ""), id);
+  const tr = String(choice[lang] ?? "").trim();
+  const display = mode === "sound" ? tr || en : tr || en;
+
+  return (
+    <Animated.View style={[{ transform: [{ scale }] }, styles.choiceWrap]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => !locked && animate(pressScale.medium)}
+        onPressOut={() => animate(1)}
+        disabled={locked}
+        style={[
+          styles.choice,
+          shadows.sm,
+          { backgroundColor: bg, borderColor: border },
+        ]}
+      >
+        <Text variant="bodyStrong" align="center" style={{ color: fg, fontSize: 16 }}>
+          {display}
+        </Text>
+        {locked && isCorrect ? (
+          <View style={styles.choiceTick}>
+            <Ionicons name="checkmark" size={14} color={palette.white} />
+          </View>
+        ) : null}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
+  root: { flex: 1 },
 
-  bgGlowTop: {
-    position: "absolute",
-    top: -36,
-    left: -24,
-    width: 190,
-    height: 190,
-    borderRadius: 999,
-    opacity: 0.22,
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.xl,
   },
-  bgGlowRight: {
-    position: "absolute",
-    top: 170,
-    right: -40,
-    width: 200,
-    height: 200,
-    borderRadius: 999,
-    opacity: 0.18,
-  },
-  bgGlowBottom: {
-    position: "absolute",
-    bottom: 120,
-    left: -38,
-    width: 190,
-    height: 190,
-    borderRadius: 999,
-    opacity: 0.18,
-  },
-  bgGlowCenter: {
-    position: "absolute",
-    top: 360,
-    left: "36%",
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    backgroundColor: "#ffd76e",
-    opacity: 0.16,
-  },
-
-  bgOrbTop: {
-    position: "absolute",
-    top: 92,
-    left: -30,
-    width: 128,
-    height: 128,
-    borderRadius: 999,
-    opacity: 0.12,
-  },
-  bgOrbRight: {
-    position: "absolute",
-    top: 220,
-    right: -32,
-    width: 150,
-    height: 150,
-    borderRadius: 999,
-    opacity: 0.12,
-  },
-  bgOrbBottom: {
-    position: "absolute",
-    bottom: 120,
-    left: -24,
-    width: 120,
-    height: 120,
-    borderRadius: 999,
-    opacity: 0.12,
-  },
-
-  container: {
-    paddingHorizontal: 18,
-  },
-
-  headerRibbonRow: {
-    alignItems: "flex-end",
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
   },
-  headerRibbon: {
-    minWidth: 136,
+
+  modeTabs: {
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.xl,
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  modeTab: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingLeft: 16,
-    paddingRight: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 2,
+    paddingVertical: spacing.md,
+    borderRadius: radii.pill,
+  },
+
+  statsRow: {
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.xl,
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  statChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: palette.white,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.lg,
+  },
+  statIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  questionWrap: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  questionCard: {
+    backgroundColor: palette.white,
+    borderRadius: radii.xl2,
+    padding: spacing.xl,
+    alignItems: "center",
+    minHeight: 180,
+  },
+
+  choicesGrid: {
+    flex: 1,
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.xl,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    alignContent: "flex-start",
+  },
+  choiceWrap: {
+    width: "48.5%",
+  },
+  choice: {
+    minHeight: 64,
+    borderRadius: radii.xl,
+    borderWidth: 1.5,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
     position: "relative",
   },
-  headerRibbonCap: {
+  choiceTick: {
     position: "absolute",
-    left: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  headerRibbonEmoji: {
-    fontSize: 14,
-  },
-  headerRibbonText: {
-    fontSize: 15,
-    fontWeight: "900",
-    textTransform: "lowercase",
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: palette.mintDeep,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  sparkleWrap: {
-    position: "absolute",
-    top: 86,
-    left: 0,
-    right: 0,
-    zIndex: 20,
+  bottomRow: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
     alignItems: "center",
   },
-  sparkleText: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-
-  badgeWrap: {
-    position: "absolute",
-    top: 12,
-    left: 16,
-    right: 16,
-    zIndex: 21,
+  skipBtn: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  badgeCard: {
-    borderRadius: 999,
-    paddingHorizontal: 16,
     paddingVertical: 10,
-  },
-  badgeText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 13,
+    paddingHorizontal: 18,
+    borderRadius: radii.pill,
   },
 
-  confettiWrap: {
+  feedbackOverlay: {
     position: "absolute",
-    top: 52,
+    top: "40%",
     left: 0,
     right: 0,
-    zIndex: 19,
     alignItems: "center",
   },
-  confettiText: {
-    fontSize: 26,
-  },
-
-  hero: {
-    marginTop: 2,
-    borderRadius: 34,
-    padding: 20,
-    overflow: "hidden",
-  },
-  heroBubbleOne: {
-    position: "absolute",
-    width: 122,
-    height: 122,
-    borderRadius: 999,
-    top: -26,
-    right: -10,
-    opacity: 0.3,
-  },
-  heroBubbleTwo: {
-    position: "absolute",
-    width: 90,
-    height: 90,
-    borderRadius: 999,
-    bottom: 20,
-    right: 26,
-    opacity: 0.22,
-  },
-  heroBubbleThree: {
-    position: "absolute",
-    width: 116,
-    height: 116,
-    borderRadius: 999,
-    left: -30,
-    bottom: -42,
-    opacity: 0.2,
-  },
-  heroTopRow: {
+  feedbackChip: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 14,
-  },
-  heroTextWrap: {
-    flex: 1,
-  },
-  heroBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.18)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginBottom: 12,
-  },
-  heroBadgeText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 12,
-    textTransform: "uppercase",
-  },
-  heroTitle: {
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-  heroSubtitle: {
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
-    color: "rgba(255,255,255,0.92)",
-    fontWeight: "700",
-    maxWidth: 250,
-  },
-  heroMascotWrap: {
-    width: 82,
-    height: 82,
-    borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
-    justifyContent: "center",
-  },
-  heroMascot: {
-    fontSize: 35,
-  },
-  heroMetaRow: {
-    marginTop: 18,
-    flexDirection: "row",
-    gap: 10,
-  },
-  heroModeCard: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 22,
     paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroModeValue: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  heroModeLabel: {
-    marginTop: 4,
-    color: "rgba(255,255,255,0.86)",
-    fontSize: 12,
-    fontWeight: "800",
-    textTransform: "lowercase",
-  },
-
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-  sectionHint: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "rgba(255,255,255,0.78)",
-  },
-
-  metricTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#2d2355",
-  },
-  metricHint: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#7c7599",
-  },
-
-  langSection: {
-    marginTop: 20,
-  },
-  langRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 10,
-  },
-  langPill: {
-    flex: 1,
-    borderRadius: 24,
-    borderWidth: 2,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  langPillText: {
-    fontWeight: "900",
-    fontSize: 15,
-  },
-  langPillSub: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  kpiRow: {
-    marginTop: 18,
-    flexDirection: "row",
-    gap: 12,
-  },
-  kpiCardBig: {
-    flex: 1.05,
-    borderRadius: 28,
-    padding: 16,
-  },
-  kpiBigLabel: {
-    color: "rgba(255,255,255,0.84)",
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  kpiBigValue: {
-    marginTop: 10,
-    color: "#ffffff",
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: "900",
-  },
-  kpiBigSub: {
-    marginTop: 4,
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  kpiCard: {
-    flex: 0.9,
-    borderRadius: 28,
-    padding: 16,
-  },
-  kpiLabel: {
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  kpiValue: {
-    marginTop: 10,
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  kpiSub: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  metricsRow: {
-    marginTop: 18,
-    flexDirection: "row",
-    gap: 12,
-  },
-  metricWide: {
-    flex: 1.2,
-    borderRadius: 28,
-    padding: 16,
-  },
-  metricSmall: {
-    flex: 0.8,
-    borderRadius: 28,
-    padding: 16,
-    borderWidth: 2,
-    justifyContent: "center",
-  },
-  metricBig: {
-    marginTop: 10,
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: "900",
-  },
-  track: {
-    marginTop: 12,
-    height: 14,
-    borderRadius: 999,
-    backgroundColor: "#ece8fb",
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    borderRadius: 999,
-  },
-  metricSmallLabel: {
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  metricSmallValue: {
-    marginTop: 10,
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  metricSmallSub: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  questionCard: {
-    marginTop: 18,
-    borderRadius: 32,
-    padding: 18,
-    borderWidth: 2,
-  },
-  questionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  questionLabel: {
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  questionTag: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  questionTagText: {
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  questionText: {
-    marginTop: 6,
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: "900",
-    maxWidth: 250,
-  },
-
-  playButton: {
-    marginTop: 16,
-    borderRadius: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderWidth: 2,
-    alignItems: "center",
-  },
-  playButtonEmoji: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  playButtonText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 16,
-  },
-  playButtonSub: {
-    marginTop: 4,
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-
-  choiceList: {
-    marginTop: 14,
-    gap: 12,
-  },
-  choiceCard: {
-    minHeight: 64,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 24,
-    borderWidth: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  choiceEmoji: {
-    fontSize: 20,
-  },
-  choiceCardText: {
-    flex: 1,
-    fontWeight: "900",
-    fontSize: 16,
-  },
-  choiceCardDim: {
-    opacity: 0.6,
-  },
-
-  controlsCard: {
-    marginTop: 18,
-    borderRadius: 30,
-    padding: 18,
-  },
-  controlRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    gap: 12,
-  },
-  modeButton: {
-    flex: 1,
-    borderRadius: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderWidth: 2,
-  },
-  modeButtonText: {
-    fontWeight: "900",
-    fontSize: 16,
-  },
-  modeButtonSub: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  resetButton: {
-    width: 120,
-    borderRadius: 24,
-    paddingVertical: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-  },
-  resetButtonText: {
-    fontWeight: "900",
-    fontSize: 16,
-  },
-  disabledButton: {
-    opacity: 0.55,
-  },
-
-  pressDown: {
-    opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+    paddingHorizontal: 22,
+    borderRadius: radii.pill,
   },
 });
