@@ -2,7 +2,11 @@
 import React, { useEffect } from "react";
 import { View } from "react-native";
 import { Stack } from "expo-router";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Speech from "expo-speech";
+
+import { useAppFonts } from "./hooks/useFonts";
+import { colors } from "./theme/colors";
 
 /**
  * Global TTS guard:
@@ -37,13 +41,25 @@ function installGlobalTTSGuard() {
 }
 
 export default function RootLayout() {
+  const { loaded, error } = useAppFonts();
+
   useEffect(() => {
     installGlobalTTSGuard();
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      console.log("[FONTS] failed to load custom fonts, falling back to system:", error);
+    }
+  }, [error]);
+
+  if (!loaded && !error) return null;
+
   return (
-    <View style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }} />
-    </View>
+    <SafeAreaProvider>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </View>
+    </SafeAreaProvider>
   );
 }

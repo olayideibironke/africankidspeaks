@@ -836,6 +836,27 @@ export default function HomeScreen() {
             <Text style={styles.resetButtonText}>Parent reset</Text>
           </Pressable>
         </View>
+
+        {__DEV__ ? (
+          <Pressable
+            onPress={() => router.push("/design-preview")}
+            style={({ pressed }) => [
+              {
+                marginTop: 18,
+                alignSelf: "center",
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                borderRadius: 999,
+                backgroundColor: "rgba(255,255,255,0.18)",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 12 }}>
+              👁  Design preview (dev only)
+            </Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
