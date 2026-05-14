@@ -11,7 +11,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as speech from "expo-speech";
 import * as haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { colors } from "../theme";
 import ParentGateModal from "../components/parentgate.modal";
 import { flashcards } from "../data/flashcards";
 import { getsettings, type settings } from "../utils/settings";
@@ -115,9 +117,88 @@ function shortForLang(lang: AudioLang) {
   return "PG";
 }
 
+function themeForLang(lang: AudioLang) {
+  if (lang === "yo") {
+    return {
+      page: "#73D7FF",
+      hero: "#6f5cff",
+      heroSoft: "#eee9ff",
+      accent: "#ff9f43",
+      accentDark: "#ef7e1a",
+      pill: "#7f6cff",
+      pillSoft: "#f2efff",
+      text: "#2d2355",
+      muted: "#7c7599",
+      card: "#ffffff",
+      cardAlt: "#fff3d6",
+      cardAltBorder: "#ffd98a",
+      correct: "#e8fff4",
+      correctBorder: "#53d396",
+      orbA: "#ffd76e",
+      orbB: "#9bdfff",
+      orbC: "#ff9ac8",
+      mascot: "🦁",
+      ribbon: "#6f5cff",
+      ribbonDark: "#5440ea",
+      ribbonSoft: "#eee9ff",
+    };
+  }
+
+  if (lang === "ig") {
+    return {
+      page: "#73D7FF",
+      hero: "#13ae73",
+      heroSoft: "#e7fff3",
+      accent: "#19b67b",
+      accentDark: "#0d8f5e",
+      pill: "#12a56d",
+      pillSoft: "#e9fff3",
+      text: "#17392d",
+      muted: "#5d8071",
+      card: "#ffffff",
+      cardAlt: "#ecfff5",
+      cardAltBorder: "#98e4be",
+      correct: "#eafff3",
+      correctBorder: "#48c888",
+      orbA: "#9cf0c1",
+      orbB: "#ffe07e",
+      orbC: "#9ad8ff",
+      mascot: "🌟",
+      ribbon: "#19b67b",
+      ribbonDark: "#0e965f",
+      ribbonSoft: "#e9fff3",
+    };
+  }
+
+  return {
+    page: "#73D7FF",
+    hero: "#ff6f61",
+    heroSoft: "#fff0eb",
+    accent: "#ff7f50",
+    accentDark: "#e85d37",
+    pill: "#ff826b",
+    pillSoft: "#fff0eb",
+    text: "#522c2a",
+    muted: "#8d6a69",
+    card: "#ffffff",
+    cardAlt: "#fff1e8",
+    cardAltBorder: "#ffcba8",
+    correct: "#fff7db",
+    correctBorder: "#ffc85f",
+    orbA: "#ffc190",
+    orbB: "#9bdfff",
+    orbC: "#ff9fc0",
+    mascot: "🦜",
+    ribbon: "#ff7f50",
+    ribbonDark: "#e25f31",
+    ribbonSoft: "#fff0e8",
+  };
+}
+
 export default function GamesScreen() {
   const params = useLocalSearchParams<{ lang?: string }>();
   const initialLang = (params.lang as AudioLang) || "yo";
+  const insets = useSafeAreaInsets();
 
   const [lang, setLang] = useState<AudioLang>(initialLang);
   const [mode, setMode] = useState<Mode>("sound");
@@ -143,6 +224,8 @@ export default function GamesScreen() {
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const confettiAnim = useRef(new Animated.Value(0)).current;
   const badgeAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   const [feedbackText, setFeedbackText] = useState<string>("");
 
   useEffect(() => {
@@ -150,8 +233,49 @@ export default function GamesScreen() {
     if (p === "yo" || p === "ig" || p === "pg") setLang(p);
   }, [params.lang]);
 
+  useEffect(() => {
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2400,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    floatLoop.start();
+    pulseLoop.start();
+
+    return () => {
+      floatLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [floatAnim, pulseAnim]);
+
   const level = useMemo(() => computeLevelFromStreak(streak), [streak]);
   const baseDifficulty = useMemo(() => difficultyForLevel(level), [level]);
+  const theme = useMemo(() => themeForLang(lang), [lang]);
 
   const accuracy = useMemo(() => {
     if (attempts <= 0) return 0;
@@ -188,12 +312,6 @@ export default function GamesScreen() {
   const targetTr = useMemo(() => {
     return String((current as any)?.[lang] ?? "").trim();
   }, [current, lang]);
-
-  const totalCards = flashcards.length || 1;
-  const learnedPercent = useMemo(() => {
-    if (!attempts) return 0;
-    return Math.round((correct / attempts) * 100);
-  }, [correct, attempts]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -256,6 +374,7 @@ export default function GamesScreen() {
     const finalChoices = hasCurrent
       ? picked
       : shuffle([current, ...picked]).slice(0, cnt);
+
     setChoices(shuffle(finalChoices));
     setLocked(false);
   }, [difficulty, current]);
@@ -292,34 +411,37 @@ export default function GamesScreen() {
     }, [loadStats, stopAudio])
   );
 
-  const runGoodFeedback = useCallback((text: string) => {
-    setFeedbackText(text);
-    sparkleAnim.setValue(0);
-    badgeAnim.setValue(0);
-
-    Animated.parallel([
-      Animated.timing(sparkleAnim, {
-        toValue: 1,
-        duration: 650,
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.timing(badgeAnim, {
-          toValue: 1,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.delay(900),
-        Animated.timing(badgeAnim, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start(() => {
+  const runGoodFeedback = useCallback(
+    (text: string) => {
+      setFeedbackText(text);
       sparkleAnim.setValue(0);
-    });
-  }, [sparkleAnim, badgeAnim]);
+      badgeAnim.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(sparkleAnim, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(badgeAnim, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+          Animated.delay(900),
+          Animated.timing(badgeAnim, {
+            toValue: 0,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start(() => {
+        sparkleAnim.setValue(0);
+      });
+    },
+    [sparkleAnim, badgeAnim]
+  );
 
   const runConfetti = useCallback(() => {
     confettiAnim.setValue(0);
@@ -465,8 +587,32 @@ export default function GamesScreen() {
     });
   }, [gated]);
 
+  const mascotBob = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -8],
+  });
+
+  const mascotScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.05],
+  });
+
+  const sparkleRise = sparkleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [16, -10],
+  });
+
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: theme.page }]}>
+      <View style={[styles.bgGlowTop, { backgroundColor: colors.primary }]} />
+      <View style={[styles.bgGlowRight, { backgroundColor: colors.sky }]} />
+      <View style={[styles.bgGlowBottom, { backgroundColor: colors.pink }]} />
+      <View style={styles.bgGlowCenter} />
+
+      <View style={[styles.bgOrbTop, { backgroundColor: theme.orbA }]} />
+      <View style={[styles.bgOrbRight, { backgroundColor: theme.orbB }]} />
+      <View style={[styles.bgOrbBottom, { backgroundColor: theme.orbC }]} />
+
       <Animated.View
         pointerEvents="none"
         style={[
@@ -474,17 +620,18 @@ export default function GamesScreen() {
           {
             opacity: sparkleAnim,
             transform: [
+              { translateY: sparkleRise },
               {
                 scale: sparkleAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0.7, 1.2],
+                  outputRange: [0.75, 1.18],
                 }),
               },
             ],
           },
         ]}
       >
-        <Text style={styles.sparkleText}>✨ ✨ ✨</Text>
+        <Text style={styles.sparkleText}>✨ Awesome! ✨</Text>
       </Animated.View>
 
       <Animated.View
@@ -504,7 +651,7 @@ export default function GamesScreen() {
           },
         ]}
       >
-        <View style={styles.badgeCard}>
+        <View style={[styles.badgeCard, { backgroundColor: theme.accent }]}>
           <Text style={styles.badgeText}>{feedbackText}</Text>
         </View>
       </Animated.View>
@@ -519,58 +666,105 @@ export default function GamesScreen() {
               {
                 translateY: confettiAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [-20, 40],
+                  outputRange: [-16, 38],
                 }),
               },
             ],
           },
         ]}
       >
-        <Text style={styles.confettiText}>🎉 🎊 🎉 🎊</Text>
+        <Text style={styles.confettiText}>🎉 🎊 🌟 🎉</Text>
       </Animated.View>
 
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: insets.top + 10,
+            paddingBottom: insets.bottom + 36,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topBar}>
-          <Text style={styles.topLabel}>games</Text>
+        <View style={styles.headerRibbonRow}>
+          <View
+            style={[
+              styles.headerRibbon,
+              {
+                backgroundColor: theme.ribbonSoft,
+                borderColor: theme.ribbon,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.headerRibbonCap,
+                { backgroundColor: theme.ribbonDark },
+              ]}
+            />
+            <Text style={[styles.headerRibbonEmoji, { color: theme.ribbonDark }]}>
+              🎮
+            </Text>
+            <Text style={[styles.headerRibbonText, { color: theme.ribbonDark }]}>
+              games
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.hero}>
+        <View style={[styles.hero, { backgroundColor: theme.hero }]}>
+          <View style={[styles.heroBubbleOne, { backgroundColor: theme.orbA }]} />
+          <View style={[styles.heroBubbleTwo, { backgroundColor: theme.orbB }]} />
+          <View style={[styles.heroBubbleThree, { backgroundColor: theme.orbC }]} />
+
           <View style={styles.heroTopRow}>
             <View style={styles.heroTextWrap}>
               <View style={styles.heroBadge}>
                 <Text style={styles.heroBadgeText}>{titleForLang(lang)}</Text>
               </View>
 
-              <Text style={styles.heroTitle}>Games</Text>
+              <Text style={styles.heroTitle}>Play and learn</Text>
               <Text style={styles.heroSubtitle}>
-                Listen, match, and build confidence through quick practice rounds.
+                Listen, tap, and grow your word power with quick colorful rounds.
               </Text>
+            </View>
+
+            <Animated.View
+              style={[
+                styles.heroMascotWrap,
+                {
+                  transform: [{ translateY: mascotBob }, { scale: mascotScale }],
+                },
+              ]}
+            >
+              <Text style={styles.heroMascot}>{theme.mascot}</Text>
+            </Animated.View>
+          </View>
+
+          <View style={styles.heroMetaRow}>
+            <View style={styles.heroModeCard}>
+              <Text style={styles.heroModeValue}>
+                {mode === "sound" ? "Sound" : "Match"}
+              </Text>
+              <Text style={styles.heroModeLabel}>mode</Text>
             </View>
 
             <View style={styles.heroModeCard}>
-              <Text style={styles.heroModeValue}>{mode === "sound" ? "Sound" : "Match"}</Text>
-              <Text style={styles.heroModeLabel}>mode</Text>
+              <Text style={styles.heroModeValue}>{difficulty.toUpperCase()}</Text>
+              <Text style={styles.heroModeLabel}>level</Text>
             </View>
-          </View>
 
-          <View style={styles.heroBottomRow}>
-            <View style={styles.heroMiniPill}>
-              <Text style={styles.heroMiniPillText}>{difficulty.toUpperCase()}</Text>
-            </View>
-            <View style={styles.heroMiniPillSoft}>
-              <Text style={styles.heroMiniPillSoftText}>
-                {recentResults.length ? `${recentAccuracy}% recent` : "warming up"}
+            <View style={styles.heroModeCard}>
+              <Text style={styles.heroModeValue}>
+                {recentResults.length ? `${recentAccuracy}%` : "New"}
               </Text>
+              <Text style={styles.heroModeLabel}>recent</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.langSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Choose a language</Text>
+            <Text style={styles.sectionTitle}>Pick a language</Text>
             <Text style={styles.sectionHint}>Switch anytime</Text>
           </View>
 
@@ -583,12 +777,32 @@ export default function GamesScreen() {
                   onPress={() => setLang(k)}
                   style={({ pressed }) => [
                     styles.langPill,
-                    selected && styles.langPillOn,
+                    {
+                      backgroundColor: "#ffffff",
+                      borderColor: "#ffffff",
+                    },
+                    selected && {
+                      backgroundColor: theme.pill,
+                      borderColor: theme.pill,
+                    },
                     pressed && styles.pressDown,
                   ]}
                 >
-                  <Text style={[styles.langPillText, selected && styles.langPillTextOn]}>
+                  <Text
+                    style={[
+                      styles.langPillText,
+                      { color: selected ? "#ffffff" : theme.text },
+                    ]}
+                  >
                     {shortForLang(k)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.langPillSub,
+                      { color: selected ? "rgba(255,255,255,0.82)" : theme.muted },
+                    ]}
+                  >
+                    {k === "yo" ? "Yoruba" : k === "ig" ? "Igbo" : "Pidgin"}
                   </Text>
                 </Pressable>
               );
@@ -597,72 +811,106 @@ export default function GamesScreen() {
         </View>
 
         <View style={styles.kpiRow}>
-          <View style={styles.kpiCardDark}>
-            <Text style={styles.kpiDarkLabel}>Score</Text>
-            <Text style={styles.kpiDarkValue}>{score}</Text>
-            <Text style={styles.kpiDarkSub}>Keep the streak alive</Text>
+          <View style={[styles.kpiCardBig, { backgroundColor: theme.accent }]}>
+            <Text style={styles.kpiBigLabel}>Score</Text>
+            <Text style={styles.kpiBigValue}>{score}</Text>
+            <Text style={styles.kpiBigSub}>Keep the fun going</Text>
           </View>
 
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Level</Text>
-            <Text style={styles.kpiValue}>{level}</Text>
-            <Text style={styles.kpiSub}>{difficulty.toUpperCase()}</Text>
+          <View style={[styles.kpiCard, { backgroundColor: theme.heroSoft }]}>
+            <Text style={[styles.kpiLabel, { color: theme.muted }]}>Level</Text>
+            <Text style={[styles.kpiValue, { color: theme.text }]}>{level}</Text>
+            <Text style={[styles.kpiSub, { color: theme.muted }]}>
+              {difficulty.toUpperCase()}
+            </Text>
           </View>
 
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Streak</Text>
-            <Text style={styles.kpiValue}>{streak}</Text>
-            <Text style={styles.kpiSub}>best run</Text>
+          <View style={[styles.kpiCard, { backgroundColor: "#ffffff" }]}>
+            <Text style={[styles.kpiLabel, { color: theme.muted }]}>Streak</Text>
+            <Text style={[styles.kpiValue, { color: theme.text }]}>{streak}</Text>
+            <Text style={[styles.kpiSub, { color: theme.muted }]}>best run</Text>
           </View>
         </View>
 
         <View style={styles.metricsRow}>
-          <View style={styles.metricWide}>
+          <View style={[styles.metricWide, { backgroundColor: "#ffffff" }]}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Accuracy</Text>
-              <Text style={styles.sectionHint}>
+              <Text style={styles.metricTitle}>Accuracy</Text>
+              <Text style={styles.metricHint}>
                 {correct}/{attempts || 0}
               </Text>
             </View>
-            <Text style={styles.metricBig}>{accuracy}%</Text>
+
+            <Text style={[styles.metricBig, { color: theme.text }]}>{accuracy}%</Text>
+
             <View style={styles.track}>
-              <View style={[styles.fill, { width: `${clamp(accuracy, 0, 100)}%` }]} />
+              <View
+                style={[
+                  styles.fill,
+                  {
+                    width: `${clamp(accuracy, 0, 100)}%`,
+                    backgroundColor: theme.pill,
+                  },
+                ]}
+              />
             </View>
           </View>
 
-          <View style={styles.metricSmall}>
-            <Text style={styles.metricSmallLabel}>Window</Text>
-            <Text style={styles.metricSmallValue}>
+          <View
+            style={[
+              styles.metricSmall,
+              { backgroundColor: theme.cardAlt, borderColor: theme.cardAltBorder },
+            ]}
+          >
+            <Text style={[styles.metricSmallLabel, { color: theme.muted }]}>Window</Text>
+            <Text style={[styles.metricSmallValue, { color: theme.text }]}>
               {recentResults.length ? `${recentAccuracy}%` : "—"}
             </Text>
-            <Text style={styles.metricSmallSub}>
+            <Text style={[styles.metricSmallSub, { color: theme.muted }]}>
               {recentResults.length}/{ADAPTIVE_WINDOW}
             </Text>
           </View>
         </View>
 
-        <View style={styles.questionCard}>
+        <View
+          style={[
+            styles.questionCard,
+            { backgroundColor: theme.cardAlt, borderColor: theme.cardAltBorder },
+          ]}
+        >
           <View style={styles.questionHeader}>
-            <Text style={styles.questionLabel}>Question</Text>
-            <View style={styles.questionTag}>
-              <Text style={styles.questionTagText}>
+            <View>
+              <Text style={[styles.questionLabel, { color: theme.muted }]}>Round</Text>
+              <Text style={[styles.questionText, { color: theme.text }]}>
+                {mode === "sound"
+                  ? "Listen and pick the English word"
+                  : "Match the translation"}
+              </Text>
+            </View>
+
+            <View style={[styles.questionTag, { backgroundColor: "#ffffff" }]}>
+              <Text style={[styles.questionTagText, { color: theme.text }]}>
                 {mode === "sound" ? "Sound quiz" : "Match mode"}
               </Text>
             </View>
           </View>
 
-          <Text style={styles.questionText}>
-            {mode === "sound"
-              ? "Listen and pick the English word"
-              : "Match the English word"}
-          </Text>
-
           <Pressable
             onPress={playQuestionAudio}
-            style={({ pressed }) => [styles.playButton, pressed && styles.pressDown]}
+            style={({ pressed }) => [
+              styles.playButton,
+              {
+                backgroundColor: theme.hero,
+                borderColor: theme.hero,
+              },
+              pressed && styles.pressDown,
+            ]}
           >
+            <Text style={styles.playButtonEmoji}>🔊</Text>
             <Text style={styles.playButtonText}>Play sound</Text>
-            <Text style={styles.playButtonSub}>Target: {questionWordEn}</Text>
+            <Text style={styles.playButtonSub}>
+              {mode === "sound" ? "Hear the word, then choose" : `Target: ${questionWordEn}`}
+            </Text>
           </Pressable>
 
           <View style={styles.choiceList}>
@@ -684,22 +932,33 @@ export default function GamesScreen() {
                   onPress={() => onPick(c)}
                   style={({ pressed }) => [
                     styles.choiceCard,
-                    locked && isCorrect && styles.choiceCardCorrect,
+                    {
+                      backgroundColor: "#ffffff",
+                      borderColor: "#ffffff",
+                    },
+                    locked &&
+                      isCorrect && {
+                        backgroundColor: theme.correct,
+                        borderColor: theme.correctBorder,
+                      },
                     locked && !isCorrect && styles.choiceCardDim,
                     pressed && !locked && styles.pressDown,
                   ]}
                 >
-                  <Text style={styles.choiceCardText}>{label}</Text>
+                  <Text style={styles.choiceEmoji}>
+                    {mode === "sound" ? "🎯" : "🧩"}
+                  </Text>
+                  <Text style={[styles.choiceCardText, { color: theme.text }]}>{label}</Text>
                 </Pressable>
               );
             })}
           </View>
         </View>
 
-        <View style={styles.controlsCard}>
+        <View style={[styles.controlsCard, { backgroundColor: theme.heroSoft }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Controls</Text>
-            <Text style={styles.sectionHint}>Round tools</Text>
+            <Text style={styles.sectionTitle}>Game tools</Text>
+            <Text style={styles.sectionHint}>Round controls</Text>
           </View>
 
           <View style={styles.controlRow}>
@@ -708,23 +967,34 @@ export default function GamesScreen() {
               onPress={() => setMode((m) => (m === "sound" ? "match" : "sound"))}
               style={({ pressed }) => [
                 styles.modeButton,
+                {
+                  backgroundColor: "#ffffff",
+                  borderColor: "#ffffff",
+                },
                 locked && styles.disabledButton,
                 pressed && !locked && styles.pressDown,
               ]}
             >
-              <Text style={styles.modeButtonText}>
+              <Text style={[styles.modeButtonText, { color: theme.text }]}>
                 Mode: {mode === "sound" ? "Sound Quiz" : "Match"}
               </Text>
-              <Text style={styles.modeButtonSub}>
+              <Text style={[styles.modeButtonSub, { color: theme.muted }]}>
                 {locked ? "Finish this question" : "Tap to switch"}
               </Text>
             </Pressable>
 
             <Pressable
               onPress={resetProgress}
-              style={({ pressed }) => [styles.resetButton, pressed && styles.pressDown]}
+              style={({ pressed }) => [
+                styles.resetButton,
+                {
+                  backgroundColor: "#ffffff",
+                  borderColor: "#ffffff",
+                },
+                pressed && styles.pressDown,
+              ]}
             >
-              <Text style={styles.resetButtonText}>Reset</Text>
+              <Text style={[styles.resetButtonText, { color: theme.text }]}>Reset</Text>
             </Pressable>
           </View>
         </View>
@@ -748,24 +1018,109 @@ export default function GamesScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#ffffff",
+  },
+
+  bgGlowTop: {
+    position: "absolute",
+    top: -36,
+    left: -24,
+    width: 190,
+    height: 190,
+    borderRadius: 999,
+    opacity: 0.22,
+  },
+  bgGlowRight: {
+    position: "absolute",
+    top: 170,
+    right: -40,
+    width: 200,
+    height: 200,
+    borderRadius: 999,
+    opacity: 0.18,
+  },
+  bgGlowBottom: {
+    position: "absolute",
+    bottom: 120,
+    left: -38,
+    width: 190,
+    height: 190,
+    borderRadius: 999,
+    opacity: 0.18,
+  },
+  bgGlowCenter: {
+    position: "absolute",
+    top: 360,
+    left: "36%",
+    width: 140,
+    height: 140,
+    borderRadius: 999,
+    backgroundColor: "#ffd76e",
+    opacity: 0.16,
+  },
+
+  bgOrbTop: {
+    position: "absolute",
+    top: 92,
+    left: -30,
+    width: 128,
+    height: 128,
+    borderRadius: 999,
+    opacity: 0.12,
+  },
+  bgOrbRight: {
+    position: "absolute",
+    top: 220,
+    right: -32,
+    width: 150,
+    height: 150,
+    borderRadius: 999,
+    opacity: 0.12,
+  },
+  bgOrbBottom: {
+    position: "absolute",
+    bottom: 120,
+    left: -24,
+    width: 120,
+    height: 120,
+    borderRadius: 999,
+    opacity: 0.12,
   },
 
   container: {
-    paddingTop: 12,
     paddingHorizontal: 18,
-    paddingBottom: 36,
   },
 
-  topBar: {
+  headerRibbonRow: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  headerRibbon: {
+    minWidth: 136,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 12,
+    gap: 6,
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 2,
+    position: "relative",
   },
-  topLabel: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111111",
+  headerRibbonCap: {
+    position: "absolute",
+    left: 10,
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  headerRibbonEmoji: {
+    fontSize: 14,
+  },
+  headerRibbonText: {
+    fontSize: 15,
+    fontWeight: "900",
     textTransform: "lowercase",
   },
 
@@ -778,7 +1133,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sparkleText: {
-    fontSize: 24,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ffffff",
   },
 
   badgeWrap: {
@@ -790,9 +1147,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   badgeCard: {
-    backgroundColor: "#111111",
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 10,
   },
   badgeText: {
@@ -803,7 +1159,7 @@ const styles = StyleSheet.create({
 
   confettiWrap: {
     position: "absolute",
-    top: 48,
+    top: 52,
     left: 0,
     right: 0,
     zIndex: 19,
@@ -814,101 +1170,111 @@ const styles = StyleSheet.create({
   },
 
   hero: {
-    marginTop: 6,
-    backgroundColor: "#f6f8fc",
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "#e9edf5",
-    padding: 18,
+    marginTop: 2,
+    borderRadius: 34,
+    padding: 20,
+    overflow: "hidden",
+  },
+  heroBubbleOne: {
+    position: "absolute",
+    width: 122,
+    height: 122,
+    borderRadius: 999,
+    top: -26,
+    right: -10,
+    opacity: 0.3,
+  },
+  heroBubbleTwo: {
+    position: "absolute",
+    width: 90,
+    height: 90,
+    borderRadius: 999,
+    bottom: 20,
+    right: 26,
+    opacity: 0.22,
+  },
+  heroBubbleThree: {
+    position: "absolute",
+    width: 116,
+    height: 116,
+    borderRadius: 999,
+    left: -30,
+    bottom: -42,
+    opacity: 0.2,
   },
   heroTopRow: {
     flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 14,
   },
   heroTextWrap: {
     flex: 1,
   },
   heroBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#e9f2ff",
+    backgroundColor: "rgba(255,255,255,0.18)",
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 999,
     marginBottom: 12,
   },
   heroBadgeText: {
-    color: "#1864d9",
-    fontWeight: "800",
+    color: "#ffffff",
+    fontWeight: "900",
     fontSize: 12,
     textTransform: "uppercase",
   },
   heroTitle: {
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 30,
+    lineHeight: 34,
     fontWeight: "900",
-    color: "#111111",
+    color: "#ffffff",
   },
   heroSubtitle: {
     marginTop: 8,
     fontSize: 15,
     lineHeight: 22,
-    color: "#667085",
-    fontWeight: "600",
+    color: "rgba(255,255,255,0.92)",
+    fontWeight: "700",
+    maxWidth: 250,
+  },
+  heroMascotWrap: {
+    width: 82,
+    height: 82,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroMascot: {
+    fontSize: 35,
+  },
+  heroMetaRow: {
+    marginTop: 18,
+    flexDirection: "row",
+    gap: 10,
   },
   heroModeCard: {
-    width: 96,
-    backgroundColor: "#ffffff",
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#e9edf5",
     paddingVertical: 14,
     paddingHorizontal: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   heroModeValue: {
+    color: "#ffffff",
     fontSize: 18,
-    color: "#111111",
     fontWeight: "900",
     textAlign: "center",
   },
   heroModeLabel: {
     marginTop: 4,
-    color: "#667085",
+    color: "rgba(255,255,255,0.86)",
     fontSize: 12,
-    fontWeight: "700",
-    textTransform: "lowercase",
-  },
-  heroBottomRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  heroMiniPill: {
-    backgroundColor: "#111111",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  heroMiniPillText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  heroMiniPillSoft: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  heroMiniPillSoftText: {
-    color: "#344054",
     fontWeight: "800",
-    fontSize: 12,
+    textTransform: "lowercase",
   },
 
   sectionHeader: {
@@ -918,18 +1284,29 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
-    color: "#111111",
+    color: "#ffffff",
   },
   sectionHint: {
     fontSize: 12,
-    fontWeight: "700",
-    color: "#98a2b3",
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.78)",
+  },
+
+  metricTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#2d2355",
+  },
+  metricHint: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#7c7599",
   },
 
   langSection: {
-    marginTop: 18,
+    marginTop: 20,
   },
   langRow: {
     marginTop: 12,
@@ -937,24 +1314,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   langPill: {
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e6eaf1",
-    backgroundColor: "#ffffff",
-  },
-  langPillOn: {
-    borderColor: "#bfd7ff",
-    backgroundColor: "#f5faff",
+    flex: 1,
+    borderRadius: 24,
+    borderWidth: 2,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   langPillText: {
-    color: "#667085",
     fontWeight: "900",
-    fontSize: 14,
+    fontSize: 15,
   },
-  langPillTextOn: {
-    color: "#1864d9",
+  langPillSub: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "800",
   },
 
   kpiRow: {
@@ -962,55 +1337,47 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
-  kpiCardDark: {
+  kpiCardBig: {
     flex: 1.05,
-    backgroundColor: "#111111",
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 16,
   },
-  kpiDarkLabel: {
-    color: "rgba(255,255,255,0.72)",
+  kpiBigLabel: {
+    color: "rgba(255,255,255,0.84)",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
     textTransform: "uppercase",
   },
-  kpiDarkValue: {
+  kpiBigValue: {
     marginTop: 10,
     color: "#ffffff",
     fontSize: 34,
     lineHeight: 38,
     fontWeight: "900",
   },
-  kpiDarkSub: {
+  kpiBigSub: {
     marginTop: 4,
-    color: "rgba(255,255,255,0.72)",
+    color: "rgba(255,255,255,0.82)",
     fontSize: 12,
     fontWeight: "700",
   },
-
   kpiCard: {
     flex: 0.9,
-    backgroundColor: "#f7f8fa",
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#eceff4",
   },
   kpiLabel: {
-    color: "#667085",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
     textTransform: "uppercase",
   },
   kpiValue: {
     marginTop: 10,
-    color: "#111111",
     fontSize: 28,
     fontWeight: "900",
   },
   kpiSub: {
     marginTop: 4,
-    color: "#667085",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1022,108 +1389,94 @@ const styles = StyleSheet.create({
   },
   metricWide: {
     flex: 1.2,
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#eceff4",
   },
   metricSmall: {
     flex: 0.8,
-    backgroundColor: "#f7f8fa",
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#eceff4",
+    borderWidth: 2,
     justifyContent: "center",
   },
   metricBig: {
     marginTop: 10,
-    color: "#111111",
     fontSize: 34,
     lineHeight: 38,
     fontWeight: "900",
   },
   track: {
     marginTop: 12,
-    height: 12,
+    height: 14,
     borderRadius: 999,
-    backgroundColor: "#e8edf5",
+    backgroundColor: "#ece8fb",
     overflow: "hidden",
   },
   fill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#1864d9",
   },
   metricSmallLabel: {
-    color: "#667085",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
     textTransform: "uppercase",
   },
   metricSmallValue: {
     marginTop: 10,
-    color: "#111111",
     fontSize: 28,
     fontWeight: "900",
   },
   metricSmallSub: {
     marginTop: 4,
-    color: "#667085",
     fontSize: 12,
     fontWeight: "700",
   },
 
   questionCard: {
     marginTop: 18,
-    backgroundColor: "#ffffff",
-    borderRadius: 28,
+    borderRadius: 32,
     padding: 18,
-    borderWidth: 1,
-    borderColor: "#eceff4",
+    borderWidth: 2,
   },
   questionHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
   },
   questionLabel: {
-    color: "#667085",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
     textTransform: "uppercase",
   },
   questionTag: {
-    backgroundColor: "#f7f8fa",
-    borderWidth: 1,
-    borderColor: "#eceff4",
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
   },
   questionTagText: {
-    color: "#344054",
     fontSize: 12,
-    fontWeight: "800",
-  },
-  questionText: {
-    marginTop: 12,
-    color: "#111111",
-    fontSize: 26,
-    lineHeight: 30,
     fontWeight: "900",
   },
+  questionText: {
+    marginTop: 6,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    maxWidth: 250,
+  },
+
   playButton: {
     marginTop: 16,
-    borderRadius: 22,
+    borderRadius: 24,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
+    borderWidth: 2,
     alignItems: "center",
+  },
+  playButtonEmoji: {
+    fontSize: 24,
+    marginBottom: 4,
   },
   playButtonText: {
     color: "#ffffff",
@@ -1132,9 +1485,10 @@ const styles = StyleSheet.create({
   },
   playButtonSub: {
     marginTop: 4,
-    color: "rgba(255,255,255,0.78)",
+    color: "rgba(255,255,255,0.85)",
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
+    textAlign: "center",
   },
 
   choiceList: {
@@ -1142,33 +1496,31 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   choiceCard: {
+    minHeight: 64,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    borderWidth: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  choiceEmoji: {
+    fontSize: 20,
   },
   choiceCardText: {
-    color: "#111111",
+    flex: 1,
     fontWeight: "900",
     fontSize: 16,
   },
-  choiceCardCorrect: {
-    borderColor: "#1864d9",
-    backgroundColor: "#f5faff",
-  },
   choiceCardDim: {
-    opacity: 0.65,
+    opacity: 0.6,
   },
 
   controlsCard: {
     marginTop: 18,
-    backgroundColor: "#f7f8fa",
-    borderRadius: 26,
+    borderRadius: 30,
     padding: 18,
-    borderWidth: 1,
-    borderColor: "#eceff4",
   },
   controlRow: {
     marginTop: 14,
@@ -1177,36 +1529,29 @@ const styles = StyleSheet.create({
   },
   modeButton: {
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 24,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
+    borderWidth: 2,
   },
   modeButtonText: {
-    color: "#111111",
     fontWeight: "900",
     fontSize: 16,
   },
   modeButtonSub: {
     marginTop: 4,
-    color: "#667085",
     fontSize: 12,
     fontWeight: "700",
   },
   resetButton: {
     width: 120,
-    borderRadius: 22,
+    borderRadius: 24,
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
+    borderWidth: 2,
   },
   resetButtonText: {
-    color: "#111111",
     fontWeight: "900",
     fontSize: 16,
   },

@@ -27,6 +27,59 @@ type Lang = "yo" | "ig" | "pg";
 
 const APP_LOGO = require("../../assets/icon.png");
 
+const LANG_COLORS: Record<
+  Lang,
+  {
+    bg: string;
+    bgSoft: string;
+    chip: string;
+    text: string;
+    accent: string;
+    bubbleA: string;
+    bubbleB: string;
+    ribbon: string;
+    ribbonDark: string;
+    ribbonSoft: string;
+  }
+> = {
+  yo: {
+    bg: "#4F8CFF",
+    bgSoft: "#EAF2FF",
+    chip: "#1C5DE7",
+    text: "#16356C",
+    accent: "#8FC2FF",
+    bubbleA: "rgba(255,255,255,0.22)",
+    bubbleB: "rgba(255,255,255,0.12)",
+    ribbon: "#6f5cff",
+    ribbonDark: "#5440ea",
+    ribbonSoft: "#eee9ff",
+  },
+  ig: {
+    bg: "#8B5CF6",
+    bgSoft: "#F1EAFE",
+    chip: "#6F3DE9",
+    text: "#4D277F",
+    accent: "#C6A8FF",
+    bubbleA: "rgba(255,255,255,0.22)",
+    bubbleB: "rgba(255,255,255,0.12)",
+    ribbon: "#19b67b",
+    ribbonDark: "#0e965f",
+    ribbonSoft: "#e9fff3",
+  },
+  pg: {
+    bg: "#FF9E2C",
+    bgSoft: "#FFF1DF",
+    chip: "#F28400",
+    text: "#844600",
+    accent: "#FFD08A",
+    bubbleA: "rgba(255,255,255,0.22)",
+    bubbleB: "rgba(255,255,255,0.12)",
+    ribbon: "#ff7f50",
+    ribbonDark: "#e25f31",
+    ribbonSoft: "#fff0e8",
+  },
+};
+
 function titleForLang(lang: Lang) {
   if (lang === "yo") return "Yoruba";
   if (lang === "ig") return "Igbo";
@@ -37,6 +90,12 @@ function shortForLang(lang: Lang) {
   if (lang === "yo") return "YO";
   if (lang === "ig") return "IG";
   return "PG";
+}
+
+function funTaglineForLang(lang: Lang) {
+  if (lang === "yo") return "Play and learn Yoruba words";
+  if (lang === "ig") return "Jump into bright Igbo practice";
+  return "Fun Nigerian Pidgin for kids";
 }
 
 function nextGoalPct(pct: number) {
@@ -81,7 +140,25 @@ export default function HomeScreen() {
 
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const bannerAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
   const [milestoneHit, setMilestoneHit] = useState<number | null>(null);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2600,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [floatAnim]);
 
   const refresh = useCallback(async () => {
     try {
@@ -105,6 +182,7 @@ export default function HomeScreen() {
   }, [refresh]);
 
   const totalWords = flashcards.length;
+  const activePalette = LANG_COLORS[lang];
 
   const learnedSetForSelected = useMemo(() => {
     if (lang === "yo") return learnedYo;
@@ -195,26 +273,33 @@ export default function HomeScreen() {
     bannerAnim.setValue(0);
 
     Animated.parallel([
-      Animated.timing(sparkleAnim, {
-        toValue: 1,
-        duration: 700,
-        useNativeDriver: true,
-      }),
       Animated.sequence([
-        Animated.timing(bannerAnim, {
+        Animated.timing(sparkleAnim, {
           toValue: 1,
           duration: 260,
           useNativeDriver: true,
         }),
-        Animated.delay(1800),
-        Animated.timing(bannerAnim, {
+        Animated.delay(900),
+        Animated.timing(sparkleAnim, {
           toValue: 0,
           duration: 260,
           useNativeDriver: true,
         }),
       ]),
+      Animated.sequence([
+        Animated.timing(bannerAnim, {
+          toValue: 1,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+        Animated.delay(1700),
+        Animated.timing(bannerAnim, {
+          toValue: 0,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start(() => {
-      sparkleAnim.setValue(0);
       setMilestoneHit(null);
     });
   }, [sparkleAnim, bannerAnim]);
@@ -292,6 +377,11 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.bgGlowTop} />
+      <View style={styles.bgGlowRight} />
+      <View style={styles.bgGlowBottom} />
+      <View style={styles.bgGlowCenter} />
+
       <Animated.View
         pointerEvents="none"
         style={[
@@ -302,14 +392,14 @@ export default function HomeScreen() {
               {
                 translateY: bannerAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [-18, 0],
+                  outputRange: [-16, 0],
                 }),
               },
             ],
           },
         ]}
       >
-        <View style={styles.milestoneCard}>
+        <View style={[styles.milestoneCard, { backgroundColor: activePalette.ribbon }]}>
           <Text style={styles.milestoneCardText}>
             {titleForLang(lang)} hit {milestoneHit ?? 0}% 🎉
           </Text>
@@ -321,22 +411,19 @@ export default function HomeScreen() {
         style={[
           styles.sparkleWrap,
           {
-            opacity: sparkleAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, 1],
-            }),
+            opacity: sparkleAnim,
             transform: [
               {
                 scale: sparkleAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0.75, 1.08],
+                  outputRange: [0.82, 1.08],
                 }),
               },
             ],
           },
         ]}
       >
-        <Text style={styles.sparkleText}>✨ ✨ ✨</Text>
+        <Text style={styles.sparkleText}>✨ 🎉 ✨</Text>
       </Animated.View>
 
       {gateOpen ? (
@@ -354,209 +441,349 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{
-          paddingTop: insets.top + 12,
-          paddingBottom: insets.bottom + 28,
-          paddingHorizontal: 18,
+          paddingTop: insets.top + 6,
+          paddingBottom: insets.bottom + 112,
+          paddingHorizontal: 16,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topBar}>
-          <Text style={styles.topLabel}>home</Text>
+        <View style={styles.headerRibbonRow}>
+          <View
+            style={[
+              styles.headerRibbon,
+              {
+                backgroundColor: activePalette.ribbonSoft,
+                borderColor: activePalette.ribbon,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.headerRibbonCap,
+                { backgroundColor: activePalette.ribbonDark },
+              ]}
+            />
+            <Text style={[styles.headerRibbonEmoji, { color: activePalette.ribbonDark }]}>
+              ✨
+            </Text>
+            <Text style={[styles.headerRibbonText, { color: activePalette.ribbonDark }]}>
+              home
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.hero}>
-          <View style={styles.heroTextWrap}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>
-                {releaseReady ? "Release ready" : "Learn African languages"}
-              </Text>
+        <View style={[styles.hero, { backgroundColor: activePalette.bg }]}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.heroBubbleLg,
+              {
+                backgroundColor: activePalette.bubbleA,
+                transform: [
+                  {
+                    translateY: floatAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -8],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.heroBubbleMd,
+              {
+                backgroundColor: activePalette.bubbleB,
+                transform: [
+                  {
+                    translateY: floatAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 10],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.heroBubbleSm,
+              {
+                backgroundColor: activePalette.bubbleA,
+                transform: [
+                  {
+                    translateY: floatAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -6],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+
+          <View style={styles.heroHeaderRow}>
+            <View style={styles.heroLogoPill}>
+              <Image source={APP_LOGO} style={styles.heroLogo} resizeMode="contain" />
             </View>
 
-            <Text style={styles.heroTitle}>AfricanKidSpeaks</Text>
-            <Text style={styles.heroSubtitle}>
-              Fun language learning for kids with native audio, simple practice, and playful review.
+            <View style={styles.heroStarsWrap}>
+              <Text style={styles.heroStars}>⭐ ⭐ ⭐</Text>
+            </View>
+          </View>
+
+          <View style={styles.heroCopyWrap}>
+            <Text style={styles.heroEyebrow}>
+              {releaseReady ? "Release ready" : "Play • listen • learn"}
             </Text>
 
-            <View style={styles.heroMetaRow}>
-              <View style={styles.heroMetaPill}>
-                <Text style={styles.heroMetaPillText}>{titleForLang(lang)}</Text>
+            <Text style={styles.heroTitle}>AfricanKidSpeaks</Text>
+            <Text style={styles.heroSubtitle}>{funTaglineForLang(lang)}</Text>
+
+            <View style={styles.heroPillsRow}>
+              <View style={styles.heroDarkPill}>
+                <Text style={styles.heroDarkPillText}>{titleForLang(lang)}</Text>
               </View>
-              <View style={styles.heroMetaPillSoft}>
-                <Text style={styles.heroMetaPillSoftText}>
-                  {nativeCoverage.pct}% native audio
-                </Text>
+              <View style={styles.heroSoftPill}>
+                <Text style={styles.heroSoftPillText}>{nativeCoverage.pct}% native audio</Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.heroLogoWrap}>
-            <Image source={APP_LOGO} style={styles.heroLogo} resizeMode="contain" />
+          <View style={styles.heroMascotRow}>
+            <View style={styles.heroMascotBubble}>
+              <Text style={styles.heroMascotEmoji}>🦁</Text>
+            </View>
+            <View style={styles.heroMascotBubbleSmall}>
+              <Text style={styles.heroMascotEmojiSmall}>🎵</Text>
+            </View>
+            <View style={styles.heroMascotBubbleSmallAlt}>
+              <Text style={styles.heroMascotEmojiSmall}>✨</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.languageSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Choose a language</Text>
-            <Text style={styles.sectionHint}>Tap a card to switch</Text>
-          </View>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Pick your language</Text>
+          <Text style={styles.sectionHint}>Kids love tapping colorful cards</Text>
+        </View>
 
-          <View style={styles.languageGrid}>
-            {(["yo", "ig", "pg"] as Lang[]).map((l) => {
-              const active = l === lang;
-              const cov = nativeCoverageFor(l);
+        <View style={styles.languageGrid}>
+          {(["yo", "ig", "pg"] as Lang[]).map((l) => {
+            const palette = LANG_COLORS[l];
+            const active = l === lang;
+            const cov = nativeCoverageFor(l);
 
-              return (
-                <Pressable
-                  key={l}
-                  onPress={() => setLang(l)}
-                  style={({ pressed }) => [
-                    styles.languageCard,
-                    active && styles.languageCardActive,
-                    pressed && styles.pressDown,
+            return (
+              <Pressable
+                key={l}
+                onPress={() => setLang(l)}
+                style={({ pressed }) => [
+                  styles.languageCard,
+                  {
+                    backgroundColor: palette.bgSoft,
+                    borderColor: active ? palette.bg : "#e6ebf3",
+                  },
+                  pressed && styles.pressDown,
+                ]}
+              >
+                <Animated.View
+                  style={[
+                    styles.languageBlob,
+                    {
+                      backgroundColor: palette.accent,
+                      transform: active
+                        ? [
+                            {
+                              translateY: floatAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, -4],
+                              }),
+                            },
+                          ]
+                        : [{ translateY: 0 }],
+                    },
                   ]}
-                >
-                  <View style={styles.languageCardTop}>
-                    <Text style={[styles.languageMini, active && styles.languageMiniActive]}>
-                      {shortForLang(l)}
-                    </Text>
-                    <View style={[styles.dot, active && styles.dotActive]} />
-                  </View>
+                />
 
-                  <Text style={styles.languageName}>{titleForLang(l)}</Text>
-                  <Text style={styles.languageCoverage}>
-                    Native audio <Text style={styles.languageCoverageStrong}>{cov.pct}%</Text>
+                <View style={styles.languageTop}>
+                  <Text style={[styles.languageTag, { backgroundColor: palette.chip }]}>
+                    {shortForLang(l)}
                   </Text>
-                </Pressable>
-              );
-            })}
+                  {active ? (
+                    <Text style={styles.languageSelected}>●</Text>
+                  ) : (
+                    <Text style={styles.languageIdle}>○</Text>
+                  )}
+                </View>
 
-            <View style={[styles.languageCard, styles.languageCardMuted]}>
-              <View style={styles.languageCardTop}>
-                <Text style={styles.languageMiniMuted}>+</Text>
-              </View>
-              <Text style={styles.languageNameMuted}>More soon</Text>
-              <Text style={styles.languageMutedText}>More languages coming in Phase 2+</Text>
+                <Text style={[styles.languageTitle, { color: palette.text }]}>{titleForLang(l)}</Text>
+                <Text style={[styles.languageSub, { color: palette.text }]}>
+                  Native audio <Text style={styles.languageSubStrong}>{cov.pct}%</Text>
+                </Text>
+                <Text style={styles.languageFun}>{funTaglineForLang(l)}</Text>
+              </Pressable>
+            );
+          })}
+
+          <View style={[styles.languageCard, styles.moreCard]}>
+            <View style={styles.morePlus}>
+              <Text style={styles.morePlusText}>+</Text>
             </View>
+            <Text style={styles.moreTitle}>More soon</Text>
+            <Text style={styles.moreSub}>New languages are coming in a future phase.</Text>
           </View>
         </View>
 
-        <View style={styles.kpiRow}>
-          <View style={styles.kpiCardLarge}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Your progress</Text>
-              <Text style={styles.sectionHint}>{titleForLang(lang)}</Text>
-            </View>
+        <View style={styles.actionRow}>
+          <Pressable
+            onPress={goLearn}
+            style={({ pressed }) => [
+              styles.mainActionCard,
+              { backgroundColor: activePalette.bg },
+              pressed && styles.pressDown,
+            ]}
+          >
+            <Text style={styles.mainActionEmoji}>📚</Text>
+            <Text style={styles.mainActionTitle}>Start learning</Text>
+            <Text style={styles.mainActionSub}>Tap, reveal, play, and keep going</Text>
+          </Pressable>
 
-            <View style={styles.kpiMainRow}>
-              <Text style={styles.kpiBig}>{learnedPctSelected}%</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.kpiLabel}>
-                  Learned{" "}
-                  <Text style={styles.kpiStrong}>
-                    {learnedCountSelected}/{totalWords}
-                  </Text>
+          <Pressable
+            onPress={goGames}
+            style={({ pressed }) => [
+              styles.mainActionCard,
+              { backgroundColor: "#111111" },
+              pressed && styles.pressDown,
+            ]}
+          >
+            <Text style={styles.mainActionEmoji}>🎮</Text>
+            <Text style={styles.mainActionTitle}>Play games</Text>
+            <Text style={styles.mainActionSub}>Sound quiz and fun review time</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.progressShell}>
+          <View style={styles.progressHeaderRow}>
+            <Text style={styles.progressTitle}>Your progress</Text>
+            <Text style={styles.progressHint}>{titleForLang(lang)}</Text>
+          </View>
+
+          <View style={styles.progressMainCard}>
+            <View style={styles.progressMainTop}>
+              <View style={styles.progressBigWrap}>
+                <Text style={styles.progressBig}>{learnedPctSelected}%</Text>
+                <Text style={styles.progressBigSub}>learned</Text>
+              </View>
+
+              <View style={styles.progressInfoWrap}>
+                <Text style={styles.progressInfoTitle}>Great job so far 🎉</Text>
+                <Text style={styles.progressInfoSub}>
+                  {learnedCountSelected}/{totalWords} words learned
                 </Text>
-                <Text style={styles.kpiSub}>
-                  Next goal <Text style={styles.kpiStrong}>{goalPct}%</Text>
+                <Text style={styles.progressInfoSub}>
+                  Next goal: <Text style={styles.progressInfoStrong}>{goalPct}%</Text>
                 </Text>
               </View>
             </View>
 
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${clampPct(learnedPctSelected)}%` }]} />
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${clampPct(learnedPctSelected)}%`,
+                    backgroundColor: activePalette.bg,
+                  },
+                ]}
+              />
             </View>
 
             <Pressable
               onPress={openWordsLearned}
-              style={({ pressed }) => [styles.inlinePrimary, pressed && styles.pressDown]}
+              style={({ pressed }) => [styles.learnedButton, pressed && styles.pressDown]}
             >
-              <Text style={styles.inlinePrimaryText}>Open learned words</Text>
+              <Text style={styles.learnedButtonText}>Open learned words</Text>
             </Pressable>
           </View>
 
-          <View style={styles.kpiStack}>
-            <View style={styles.kpiSmallCard}>
-              <Text style={styles.kpiSmallLabel}>Overall</Text>
-              <Text style={styles.kpiSmallValue}>{overall.pct}%</Text>
-              <Text style={styles.kpiSmallSub}>
+          <View style={styles.kpiMiniRow}>
+            <View style={styles.kpiMiniCard}>
+              <Text style={styles.kpiMiniLabel}>Overall</Text>
+              <Text style={styles.kpiMiniValue}>{overall.pct}%</Text>
+              <Text style={styles.kpiMiniSub}>
                 {overall.num}/{overall.denom}
               </Text>
             </View>
 
-            <View style={styles.kpiSmallCard}>
-              <Text style={styles.kpiSmallLabel}>Native audio</Text>
-              <Text style={styles.kpiSmallValue}>{nativeCoverage.pct}%</Text>
-              <Text style={styles.kpiSmallSub}>
+            <View style={styles.kpiMiniCard}>
+              <Text style={styles.kpiMiniLabel}>Native audio</Text>
+              <Text style={styles.kpiMiniValue}>{nativeCoverage.pct}%</Text>
+              <Text style={styles.kpiMiniSub}>
                 {nativeCoverage.has}/{totalWords}
               </Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.breakdownCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Language breakdown</Text>
-            <Text style={styles.sectionHint}>YO • IG • PG</Text>
-          </View>
-
-          <View style={styles.breakdownRow}>
-            {(
-              [
-                { k: "yo" as Lang, label: "YO", pct: learnedPcts.yo, count: learnedCounts.yo },
-                { k: "ig" as Lang, label: "IG", pct: learnedPcts.ig, count: learnedCounts.ig },
-                { k: "pg" as Lang, label: "PG", pct: learnedPcts.pg, count: learnedCounts.pg },
-              ] as const
-            ).map(({ k, label, pct, count }) => {
-              const active = k === lang;
-              return (
-                <View key={k} style={[styles.breakdownMini, active && styles.breakdownMiniActive]}>
-                  <View style={styles.breakdownMiniTop}>
-                    <Text style={[styles.breakdownTag, active && styles.breakdownTagActive]}>
-                      {label}
-                    </Text>
-                    <Text style={styles.breakdownPct}>{pct}%</Text>
-                  </View>
-                  <Text style={styles.breakdownSub}>
-                    {count}/{totalWords} learned
-                  </Text>
-                  <View style={styles.breakdownTrack}>
-                    <View style={[styles.breakdownFill, { width: `${clampPct(pct)}%` }]} />
-                  </View>
-                </View>
-              );
-            })}
-          </View>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Language stars</Text>
+          <Text style={styles.sectionHint}>A quick look at each track</Text>
         </View>
 
-        <View style={styles.quickActionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quick actions</Text>
-            <Text style={styles.sectionHint}>Jump in fast</Text>
-          </View>
+        <View style={styles.breakdownRow}>
+          {(
+            [
+              { k: "yo" as Lang, label: "YO", pct: learnedPcts.yo, count: learnedCounts.yo },
+              { k: "ig" as Lang, label: "IG", pct: learnedPcts.ig, count: learnedCounts.ig },
+              { k: "pg" as Lang, label: "PG", pct: learnedPcts.pg, count: learnedCounts.pg },
+            ] as const
+          ).map(({ k, label, pct, count }) => {
+            const palette = LANG_COLORS[k];
+            const active = k === lang;
 
-          <View style={styles.actionGrid}>
-            <Pressable
-              onPress={goLearn}
-              style={({ pressed }) => [styles.actionPrimary, pressed && styles.pressDown]}
-            >
-              <Text style={styles.actionPrimaryTitle}>Start learning</Text>
-              <Text style={styles.actionPrimarySub}>Practice {titleForLang(lang)}</Text>
-            </Pressable>
+            return (
+              <View
+                key={k}
+                style={[
+                  styles.breakdownCard,
+                  { backgroundColor: palette.bgSoft, borderColor: active ? palette.bg : "#e6ebf3" },
+                ]}
+              >
+                <View style={styles.breakdownTop}>
+                  <Text style={[styles.breakdownTag, { backgroundColor: palette.chip }]}>{label}</Text>
+                  <Text style={[styles.breakdownPct, { color: palette.text }]}>{pct}%</Text>
+                </View>
 
-            <Pressable
-              onPress={goGames}
-              style={({ pressed }) => [styles.actionSecondary, pressed && styles.pressDown]}
-            >
-              <Text style={styles.actionSecondaryTitle}>Play games</Text>
-              <Text style={styles.actionSecondarySub}>Review with sound quiz</Text>
-            </Pressable>
-          </View>
+                <Text style={[styles.breakdownCount, { color: palette.text }]}>
+                  {count}/{totalWords} learned
+                </Text>
 
-          <View style={styles.pillRow}>
+                <View style={styles.breakdownTrack}>
+                  <View
+                    style={[
+                      styles.breakdownFill,
+                      { width: `${clampPct(pct)}%`, backgroundColor: palette.bg },
+                    ]}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={styles.utilityShell}>
+          <Text style={styles.utilityTitle}>More to explore</Text>
+
+          <View style={styles.utilityRow}>
             <Pressable
               onPress={openWordsAll}
               style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
             >
+              <Text style={styles.utilityPillEmoji}>📝</Text>
               <Text style={styles.utilityPillText}>Words</Text>
             </Pressable>
 
@@ -564,13 +791,17 @@ export default function HomeScreen() {
               onPress={openWordsMissing}
               style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
             >
+              <Text style={styles.utilityPillEmoji}>🔊</Text>
               <Text style={styles.utilityPillText}>Missing audio</Text>
             </Pressable>
+          </View>
 
+          <View style={styles.utilityRow}>
             <Pressable
               onPress={openAudioReport}
               style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
             >
+              <Text style={styles.utilityPillEmoji}>📊</Text>
               <Text style={styles.utilityPillText}>Audio report</Text>
             </Pressable>
 
@@ -578,20 +809,25 @@ export default function HomeScreen() {
               onPress={refresh}
               style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
             >
+              <Text style={styles.utilityPillEmoji}>🔄</Text>
               <Text style={styles.utilityPillText}>Refresh</Text>
             </Pressable>
           </View>
         </View>
 
-        <View style={styles.parentCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Parent tools</Text>
-            <Text style={styles.sectionHint}>Protected reset</Text>
-          </View>
+        <View style={styles.parentShell}>
+          <View style={styles.parentTop}>
+            <View style={styles.parentIconWrap}>
+              <Text style={styles.parentIcon}>👨‍👩‍👧</Text>
+            </View>
 
-          <Text style={styles.parentText}>
-            Learned progress is tracked separately for Yoruba, Igbo, and Pidgin.
-          </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.parentTitle}>Parent tools</Text>
+              <Text style={styles.parentSub}>
+                Progress is tracked separately for Yoruba, Igbo, and Pidgin.
+              </Text>
+            </View>
+          </View>
 
           <Pressable
             onPress={requestResetLang}
@@ -608,22 +844,85 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.homeBg,
   },
 
   scroll: {
     flex: 1,
   },
 
-  topBar: {
+  bgGlowTop: {
+    position: "absolute",
+    top: -40,
+    left: -20,
+    width: 200,
+    height: 200,
+    borderRadius: 999,
+    backgroundColor: "#9b8cff",
+    opacity: 0.24,
+  },
+  bgGlowRight: {
+    position: "absolute",
+    top: 150,
+    right: -45,
+    width: 210,
+    height: 210,
+    borderRadius: 999,
+    backgroundColor: "#7fe1ff",
+    opacity: 0.18,
+  },
+  bgGlowBottom: {
+    position: "absolute",
+    bottom: 110,
+    left: -45,
+    width: 210,
+    height: 210,
+    borderRadius: 999,
+    backgroundColor: "#ff9ecb",
+    opacity: 0.18,
+  },
+  bgGlowCenter: {
+    position: "absolute",
+    top: 340,
+    left: "35%",
+    width: 140,
+    height: 140,
+    borderRadius: 999,
+    backgroundColor: "#ffd86c",
+    opacity: 0.12,
+  },
+
+  headerRibbonRow: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  headerRibbon: {
+    minWidth: 128,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 12,
+    gap: 6,
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 2,
+    position: "relative",
   },
-  topLabel: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111111",
+  headerRibbonCap: {
+    position: "absolute",
+    left: 10,
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  headerRibbonEmoji: {
+    fontSize: 14,
+  },
+  headerRibbonText: {
+    fontSize: 15,
+    fontWeight: "900",
     textTransform: "lowercase",
   },
 
@@ -636,7 +935,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   milestoneCard: {
-    backgroundColor: "#111111",
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 999,
@@ -646,6 +944,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 13,
   },
+
   sparkleWrap: {
     position: "absolute",
     top: 78,
@@ -659,441 +958,562 @@ const styles = StyleSheet.create({
   },
 
   hero: {
-    marginTop: 6,
-    padding: 20,
-    borderRadius: 28,
-    backgroundColor: "#f6f8fc",
-    borderWidth: 1,
-    borderColor: "#e9edf5",
+    marginTop: 2,
+    borderRadius: 34,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 20,
+    overflow: "hidden",
+  },
+  heroBubbleLg: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 999,
+    top: -22,
+    right: -18,
+  },
+  heroBubbleMd: {
+    position: "absolute",
+    width: 96,
+    height: 96,
+    borderRadius: 999,
+    bottom: 26,
+    left: -10,
+  },
+  heroBubbleSm: {
+    position: "absolute",
+    width: 54,
+    height: 54,
+    borderRadius: 999,
+    top: 86,
+    right: 90,
+  },
+
+  heroHeaderRow: {
     flexDirection: "row",
-    gap: 14,
+    justifyContent: "space-between",
     alignItems: "center",
   },
-  heroTextWrap: {
-    flex: 1,
+  heroLogoPill: {
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.45)",
   },
-  heroBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#e9f2ff",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+  heroLogo: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+  },
+  heroStarsWrap: {
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 999,
-    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  heroBadgeText: {
-    color: "#1864d9",
-    fontWeight: "800",
-    fontSize: 12,
+  heroStars: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  heroCopyWrap: {
+    marginTop: 16,
+  },
+  heroEyebrow: {
+    color: "#ffffff",
+    opacity: 0.92,
+    fontWeight: "900",
     textTransform: "uppercase",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   heroTitle: {
-    fontSize: 28,
-    lineHeight: 32,
+    marginTop: 8,
+    fontSize: 34,
+    lineHeight: 38,
     fontWeight: "900",
-    color: "#111111",
+    color: "#ffffff",
   },
   heroSubtitle: {
     marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#667085",
-    fontWeight: "600",
+    fontSize: 16,
+    lineHeight: 23,
+    color: "#ffffff",
+    opacity: 0.96,
+    fontWeight: "700",
+    maxWidth: "88%",
   },
-  heroMetaRow: {
+
+  heroPillsRow: {
     marginTop: 14,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
-  heroMetaPill: {
+  heroDarkPill: {
     backgroundColor: "#111111",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
-  heroMetaPillText: {
+  heroDarkPillText: {
     color: "#ffffff",
     fontWeight: "900",
     fontSize: 12,
   },
-  heroMetaPillSoft: {
+  heroSoftPill: {
     backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
-  heroMetaPillSoftText: {
-    color: "#344054",
-    fontWeight: "800",
+  heroSoftPillText: {
+    color: "#111111",
+    fontWeight: "900",
     fontSize: 12,
   },
-  heroLogoWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e9edf5",
-  },
-  heroLogo: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-  },
 
-  sectionHeader: {
+  heroMascotRow: {
+    marginTop: 18,
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+  },
+  heroMascotBubble: {
+    width: 66,
+    height: 66,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroMascotBubbleSmall: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroMascotBubbleSmallAlt: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroMascotEmoji: {
+    fontSize: 30,
+  },
+  heroMascotEmojiSmall: {
+    fontSize: 18,
+  },
+
+  sectionRow: {
+    marginTop: 22,
+    marginBottom: 12,
+    flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     gap: 10,
   },
   sectionTitle: {
-    fontSize: 18,
+    color: "#ffffff",
+    fontSize: 24,
     fontWeight: "900",
-    color: "#111111",
   },
   sectionHint: {
+    color: "rgba(255,255,255,0.75)",
     fontSize: 12,
-    fontWeight: "700",
-    color: "#98a2b3",
+    fontWeight: "800",
+    textAlign: "right",
+    maxWidth: 120,
   },
 
-  languageSection: {
-    marginTop: 18,
-  },
   languageGrid: {
-    marginTop: 12,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
   },
   languageCard: {
     width: "48%",
-    backgroundColor: "#ffffff",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
+    borderRadius: 28,
+    borderWidth: 2,
     padding: 16,
+    minHeight: 184,
+    overflow: "hidden",
   },
-  languageCardActive: {
-    backgroundColor: "#f7fbff",
-    borderColor: "#b9d4ff",
+  languageBlob: {
+    position: "absolute",
+    width: 110,
+    height: 110,
+    borderRadius: 999,
+    top: -18,
+    right: -18,
   },
-  languageCardMuted: {
-    backgroundColor: "#fafafa",
-  },
-  languageCardTop: {
+  languageTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  languageMini: {
-    backgroundColor: "#111111",
+  languageTag: {
     color: "#ffffff",
     fontWeight: "900",
     fontSize: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     overflow: "hidden",
   },
-  languageMiniActive: {
-    backgroundColor: "#1864d9",
-  },
-  languageMiniMuted: {
-    backgroundColor: "#eceff4",
-    color: "#667085",
+  languageSelected: {
+    color: "#1864d9",
+    fontSize: 14,
     fontWeight: "900",
-    fontSize: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    overflow: "hidden",
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: "#d0d5dd",
+  languageIdle: {
+    color: "#c2c8d1",
+    fontSize: 14,
+    fontWeight: "900",
   },
-  dotActive: {
-    backgroundColor: "#1864d9",
-  },
-  languageName: {
-    marginTop: 14,
+  languageTitle: {
+    marginTop: 18,
     fontSize: 22,
     fontWeight: "900",
-    color: "#111111",
   },
-  languageCoverage: {
+  languageSub: {
     marginTop: 8,
     fontSize: 14,
-    color: "#667085",
     fontWeight: "700",
   },
-  languageCoverageStrong: {
+  languageSubStrong: {
     color: "#111111",
     fontWeight: "900",
   },
-  languageNameMuted: {
-    marginTop: 14,
+  languageFun: {
+    marginTop: 12,
+    color: "#667085",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    maxWidth: "84%",
+  },
+
+  moreCard: {
+    backgroundColor: colors.homeBgSoft,
+    borderColor: "rgba(255,255,255,0.14)",
+    justifyContent: "center",
+  },
+  morePlus: {
+    width: 54,
+    height: 54,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  morePlusText: {
+    color: "#ffffff",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  moreTitle: {
+    marginTop: 20,
+    color: "#ffffff",
     fontSize: 22,
     fontWeight: "900",
-    color: "#98a2b3",
   },
-  languageMutedText: {
+  moreSub: {
     marginTop: 8,
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+    maxWidth: "85%",
+  },
+
+  actionRow: {
+    marginTop: 18,
+    gap: 12,
+  },
+  mainActionCard: {
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  mainActionEmoji: {
+    fontSize: 26,
+  },
+  mainActionTitle: {
+    marginTop: 10,
+    color: "#ffffff",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  mainActionSub: {
+    marginTop: 6,
+    color: "rgba(255,255,255,0.88)",
     fontSize: 14,
-    color: "#98a2b3",
+    lineHeight: 19,
     fontWeight: "700",
   },
 
-  kpiRow: {
+  progressShell: {
     marginTop: 18,
+  },
+  progressHeaderRow: {
+    marginBottom: 12,
     flexDirection: "row",
-    gap: 12,
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  kpiCardLarge: {
-    flex: 1.2,
-    backgroundColor: "#111111",
-    borderRadius: 26,
-    padding: 18,
+  progressTitle: {
+    color: "#ffffff",
+    fontSize: 24,
+    fontWeight: "900",
   },
-  kpiStack: {
-    flex: 0.82,
-    gap: 12,
-  },
-  kpiSmallCard: {
-    flex: 1,
-    backgroundColor: "#f7f8fa",
-    borderRadius: 22,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#eceff4",
-  },
-  kpiSmallLabel: {
-    color: "#667085",
+  progressHint: {
+    color: "rgba(255,255,255,0.75)",
     fontSize: 12,
     fontWeight: "800",
-    textTransform: "uppercase",
   },
-  kpiSmallValue: {
-    marginTop: 10,
+  progressMainCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "#e7ebf2",
+    padding: 18,
+  },
+  progressMainTop: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
+  },
+  progressBigWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 999,
+    backgroundColor: "#f7f8fa",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e7ebf2",
+  },
+  progressBig: {
     color: "#111111",
     fontSize: 28,
     fontWeight: "900",
   },
-  kpiSmallSub: {
-    marginTop: 4,
+  progressBigSub: {
+    marginTop: 2,
     color: "#667085",
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
-
-  kpiMainRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+  progressInfoWrap: {
+    flex: 1,
   },
-  kpiBig: {
-    fontSize: 40,
-    lineHeight: 44,
-    color: "#ffffff",
+  progressInfoTitle: {
+    color: "#111111",
+    fontSize: 17,
     fontWeight: "900",
   },
-  kpiLabel: {
-    color: "rgba(255,255,255,0.72)",
+  progressInfoSub: {
+    marginTop: 5,
+    color: "#667085",
     fontSize: 14,
+    lineHeight: 19,
     fontWeight: "700",
   },
-  kpiSub: {
-    marginTop: 4,
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  kpiStrong: {
-    color: "#ffffff",
+  progressInfoStrong: {
+    color: "#111111",
     fontWeight: "900",
   },
   progressTrack: {
-    marginTop: 14,
-    height: 12,
+    marginTop: 16,
+    height: 14,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "#e9edf5",
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#5da0ff",
   },
-  inlinePrimary: {
-    marginTop: 14,
+  learnedButton: {
+    marginTop: 16,
     alignSelf: "flex-start",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111111",
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
   },
-  inlinePrimaryText: {
-    color: "#111111",
-    fontSize: 13,
+  learnedButtonText: {
+    color: "#ffffff",
     fontWeight: "900",
+    fontSize: 13,
   },
 
-  breakdownCard: {
-    marginTop: 18,
-    backgroundColor: "#ffffff",
-    borderRadius: 26,
-    padding: 18,
+  kpiMiniRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 12,
+  },
+  kpiMiniCard: {
+    flex: 1,
+    backgroundColor: "#f7f8fa",
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: "#eceff4",
+    padding: 16,
   },
+  kpiMiniLabel: {
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  kpiMiniValue: {
+    marginTop: 8,
+    color: "#111111",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+  kpiMiniSub: {
+    marginTop: 4,
+    color: "#667085",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
   breakdownRow: {
-    marginTop: 14,
     flexDirection: "row",
     gap: 10,
   },
-  breakdownMini: {
+  breakdownCard: {
     flex: 1,
-    backgroundColor: "#f8fafc",
-    borderRadius: 18,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#eceff4",
+    borderRadius: 24,
+    borderWidth: 2,
+    padding: 14,
   },
-  breakdownMiniActive: {
-    backgroundColor: "#f5faff",
-    borderColor: "#bfd7ff",
-  },
-  breakdownMiniTop: {
+  breakdownTop: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
     gap: 8,
   },
   breakdownTag: {
-    backgroundColor: "#111111",
     color: "#ffffff",
     fontWeight: "900",
     fontSize: 11,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
     borderRadius: 999,
     overflow: "hidden",
   },
-  breakdownTagActive: {
-    backgroundColor: "#1864d9",
-  },
   breakdownPct: {
-    color: "#111111",
+    fontSize: 15,
     fontWeight: "900",
-    fontSize: 14,
   },
-  breakdownSub: {
-    marginTop: 8,
-    color: "#667085",
-    fontWeight: "700",
+  breakdownCount: {
+    marginTop: 10,
     fontSize: 12,
     lineHeight: 16,
+    fontWeight: "700",
   },
   breakdownTrack: {
-    marginTop: 10,
+    marginTop: 12,
     height: 10,
     borderRadius: 999,
-    backgroundColor: "#e9edf5",
+    backgroundColor: "rgba(255,255,255,0.75)",
     overflow: "hidden",
   },
   breakdownFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#1864d9",
   },
 
-  quickActionCard: {
+  utilityShell: {
     marginTop: 18,
-    backgroundColor: "#f7f8fa",
-    borderRadius: 26,
-    padding: 18,
+    backgroundColor: colors.homeBgSoft,
+    borderRadius: 30,
     borderWidth: 1,
-    borderColor: "#eceff4",
-  },
-  actionGrid: {
-    marginTop: 14,
-    gap: 12,
-  },
-  actionPrimary: {
-    backgroundColor: "#1864d9",
-    borderRadius: 22,
+    borderColor: "rgba(255,255,255,0.12)",
     padding: 18,
   },
-  actionPrimaryTitle: {
+  utilityTitle: {
     color: "#ffffff",
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "900",
   },
-  actionPrimarySub: {
-    marginTop: 4,
-    color: "rgba(255,255,255,0.86)",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  actionSecondary: {
-    backgroundColor: "#ffffff",
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-  },
-  actionSecondaryTitle: {
-    color: "#111111",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  actionSecondarySub: {
-    marginTop: 4,
-    color: "#667085",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  pillRow: {
-    marginTop: 14,
+  utilityRow: {
+    marginTop: 12,
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
   },
   utilityPill: {
+    flex: 1,
     backgroundColor: "#ffffff",
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: "#e7ebf2",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 74,
+  },
+  utilityPillEmoji: {
+    fontSize: 18,
   },
   utilityPillText: {
+    marginTop: 6,
     color: "#111111",
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: 13,
+    textAlign: "center",
   },
 
-  parentCard: {
+  parentShell: {
     marginTop: 18,
-    backgroundColor: "#ffffff",
-    borderRadius: 26,
-    padding: 18,
+    backgroundColor: "#FFF1DF",
+    borderRadius: 30,
     borderWidth: 1,
-    borderColor: "#eceff4",
+    borderColor: "#FFD9AA",
+    padding: 18,
   },
-  parentText: {
-    marginTop: 10,
-    color: "#667085",
+  parentTop: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  parentIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  parentIcon: {
+    fontSize: 24,
+  },
+  parentTitle: {
+    color: "#844600",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  parentSub: {
+    marginTop: 6,
+    color: "#844600",
+    opacity: 0.86,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "700",
@@ -1101,15 +1521,13 @@ const styles = StyleSheet.create({
   resetButton: {
     marginTop: 16,
     alignSelf: "flex-start",
+    backgroundColor: "#111111",
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 11,
-    borderWidth: 1.5,
-    borderColor: "#d92d20",
-    backgroundColor: "#fff5f4",
   },
   resetButtonText: {
-    color: "#d92d20",
+    color: "#ffffff",
     fontWeight: "900",
     fontSize: 13,
     textTransform: "uppercase",

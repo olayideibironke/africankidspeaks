@@ -8,13 +8,13 @@ import {
   StyleSheet,
   Keyboard,
   Platform,
+  Animated,
 } from "react-native";
-import { colors } from "../theme";
+import { colors, radii, shadows } from "../theme";
 
 type Props = {
   visible: boolean;
 
-  // support both naming styles (settings + games may use different prop names)
   onClose?: () => void;
   onCancel?: () => void;
 
@@ -24,7 +24,6 @@ type Props = {
   title?: string;
   subtitle?: string;
 
-  // optional: control difficulty if you want later
   min?: number;
   max?: number;
 };
@@ -53,6 +52,9 @@ export default function ParentGateModal({
 
   const [answer, setAnswer] = useState("");
   const [touched, setTouched] = useState(false);
+
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
 
   const expected = useMemo(() => a + b, [a, b]);
 
@@ -90,16 +92,53 @@ export default function ParentGateModal({
     };
   }, []);
 
-  // regenerate challenge whenever modal opens
+  useEffect(() => {
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2200,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    floatLoop.start();
+    pulseLoop.start();
+
+    return () => {
+      floatLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [floatAnim, pulseAnim]);
+
   useEffect(() => {
     if (!visible) return;
     resetChallenge();
-    // small delay helps on iOS to avoid focus/keyboard weirdness
     const t = setTimeout(() => {
       if (!mountedRef.current) return;
     }, 30);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const onConfirm = () => {
@@ -111,10 +150,19 @@ export default function ParentGateModal({
   };
 
   const onChange = (text: string) => {
-    // keep only digits (prevents " " / "." / "-" issues)
     const cleaned = text.replace(/[^\d]/g, "");
     setAnswer(cleaned);
   };
+
+  const bubbleFloat = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -8],
+  });
+
+  const mascotScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.06],
+  });
 
   return (
     <Modal
@@ -128,14 +176,41 @@ export default function ParentGateModal({
 
       <View style={styles.center}>
         <View style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <View style={styles.orbTopLeft} />
+          <View style={styles.orbTopRight} />
+          <View style={styles.orbBottom} />
 
-          {/* ✅ FIX: make the math question big + high contrast */}
-          <View style={styles.questionWrap}>
-            <Text style={styles.questionText}>
-              {a} + {b} = ?
-            </Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerTextWrap}>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>for parents</Text>
+              </View>
+
+              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            </View>
+
+            <Animated.View
+              style={[
+                styles.mascotWrap,
+                {
+                  transform: [{ translateY: bubbleFloat }, { scale: mascotScale }],
+                },
+              ]}
+            >
+              <Text style={styles.mascotText}>🔐</Text>
+            </Animated.View>
+          </View>
+
+          <View style={styles.questionShell}>
+            <Text style={styles.questionLabel}>math challenge</Text>
+
+            <View style={styles.questionWrap}>
+              <Text style={styles.questionEmoji}>🧠</Text>
+              <Text style={styles.questionText}>
+                {a} + {b} = ?
+              </Text>
+            </View>
           </View>
 
           <TextInput
@@ -143,34 +218,37 @@ export default function ParentGateModal({
             onChangeText={onChange}
             onFocus={() => setTouched(false)}
             placeholder="type the answer"
-            placeholderTextColor="rgba(0,0,0,0.35)"
+            placeholderTextColor={colors.muted}
             keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
             returnKeyType="done"
             onSubmitEditing={onConfirm}
-            style={styles.input}
+            style={[
+              styles.input,
+              touched && !isCorrect && styles.inputError,
+              isCorrect && styles.inputCorrect,
+            ]}
           />
 
-          {/* feedback */}
           {touched && !isCorrect ? (
             <Text style={styles.error}>not quite — try again</Text>
+          ) : isCorrect ? (
+            <Text style={styles.success}>great job — ready to confirm</Text>
           ) : (
-            <Text style={styles.helper}>
-              hint: add the two numbers above
-            </Text>
+            <Text style={styles.helper}>hint: add the two numbers above</Text>
           )}
 
           <View style={styles.row}>
-            <Pressable onPress={close} style={styles.btnGhost}>
+            <Pressable style={({ pressed }) => [styles.btnGhost, pressed && styles.pressDown]} onPress={close}>
               <Text style={styles.btnGhostText}>cancel</Text>
             </Pressable>
 
-            {/* ✅ FIX: confirm button always visible; disabled style is clear */}
             <Pressable
               onPress={onConfirm}
               disabled={!isCorrect}
-              style={[
+              style={({ pressed }) => [
                 styles.btnPrimary,
                 !isCorrect && styles.btnPrimaryDisabled,
+                pressed && isCorrect && styles.pressDown,
               ]}
             >
               <Text
@@ -184,7 +262,11 @@ export default function ParentGateModal({
             </Pressable>
           </View>
 
-          <Pressable onPress={resetChallenge} style={styles.refresh}>
+          <Pressable
+            onPress={resetChallenge}
+            style={({ pressed }) => [styles.refresh, pressed && styles.pressDown]}
+          >
+            <Text style={styles.refreshEmoji}>🔄</Text>
             <Text style={styles.refreshText}>new question</Text>
           </Pressable>
         </View>
@@ -200,130 +282,268 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(45,35,85,0.55)",
   },
+
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 22,
   },
+
   card: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.10)",
+    borderRadius: radii.xl,
+    padding: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    overflow: "hidden",
+    ...shadows.card,
   },
+
+  orbTopLeft: {
+    position: "absolute",
+    top: -24,
+    left: -18,
+    width: 96,
+    height: 96,
+    borderRadius: 999,
+    backgroundColor: colors.yellow,
+    opacity: 0.22,
+  },
+
+  orbTopRight: {
+    position: "absolute",
+    top: -10,
+    right: -14,
+    width: 120,
+    height: 120,
+    borderRadius: 999,
+    backgroundColor: colors.sky,
+    opacity: 0.2,
+  },
+
+  orbBottom: {
+    position: "absolute",
+    bottom: -28,
+    left: 28,
+    width: 110,
+    height: 110,
+    borderRadius: 999,
+    backgroundColor: colors.pink,
+    opacity: 0.16,
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "flex-start",
+  },
+
+  headerTextWrap: {
+    flex: 1,
+  },
+
+  badge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
+    marginBottom: 12,
+  },
+
+  badgeText: {
+    color: colors.primaryDark,
+    fontWeight: "900",
+    fontSize: 12,
+    textTransform: "lowercase",
+  },
+
   title: {
-    fontSize: 18,
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: "900",
-    color: "#111",
+    color: colors.text,
     textTransform: "lowercase",
   },
+
   subtitle: {
-    marginTop: 4,
-    color: "rgba(0,0,0,0.60)",
-    textTransform: "lowercase",
-  },
-
-  questionWrap: {
-    marginTop: 14,
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(0,0,0,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  questionText: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#111",
-  },
-
-  input: {
-    marginTop: 12,
-    height: 46,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255,255,255,1)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.18)",
-    color: "#111",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-
-  helper: {
-    marginTop: 8,
-    color: "rgba(0,0,0,0.55)",
+    marginTop: 6,
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: "700",
     textTransform: "lowercase",
   },
+
+  mascotWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 24,
+    backgroundColor: colors.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.borderWarm,
+  },
+
+  mascotText: {
+    fontSize: 32,
+  },
+
+  questionShell: {
+    marginTop: 16,
+  },
+
+  questionLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+
+  questionWrap: {
+    borderRadius: radii.lg,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 2,
+    borderColor: colors.borderWarm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  questionEmoji: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+
+  questionText: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: colors.text,
+  },
+
+  input: {
+    marginTop: 14,
+    height: 52,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.border,
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "800",
+  },
+
+  inputError: {
+    borderColor: colors.danger,
+    backgroundColor: "#fff5f4",
+  },
+
+  inputCorrect: {
+    borderColor: colors.secondary,
+    backgroundColor: colors.secondarySoft,
+  },
+
+  helper: {
+    marginTop: 10,
+    color: colors.muted,
+    fontWeight: "700",
+    textTransform: "lowercase",
+  },
+
+  success: {
+    marginTop: 10,
+    color: colors.secondary,
+    fontWeight: "900",
+    textTransform: "lowercase",
+  },
+
   error: {
-    marginTop: 8,
-    color: "#b00020",
+    marginTop: 10,
+    color: colors.danger,
     fontWeight: "900",
     textTransform: "lowercase",
   },
 
   row: {
-    marginTop: 14,
+    marginTop: 16,
     flexDirection: "row",
     gap: 10,
   },
 
   btnGhost: {
     flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
+    borderRadius: radii.md,
+    paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.12)",
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.border,
   },
+
   btnGhostText: {
-    color: "#111",
+    color: colors.text,
     fontWeight: "900",
     textTransform: "lowercase",
   },
 
   btnPrimary: {
     flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
+    borderRadius: radii.md,
+    paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.20)",
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.primaryDark,
   },
+
   btnPrimaryDisabled: {
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderColor: "rgba(0,0,0,0.10)",
+    backgroundColor: colors.mutedSoft,
+    borderColor: colors.mutedSoft,
   },
+
   btnPrimaryText: {
-    color: "#fff",
+    color: colors.white,
     fontWeight: "900",
     textTransform: "lowercase",
   },
+
   btnPrimaryTextDisabled: {
-    color: "rgba(255,255,255,0.90)",
+    color: "rgba(255,255,255,0.92)",
   },
 
   refresh: {
-    marginTop: 12,
+    marginTop: 14,
     alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.pinkSoft,
   },
+
+  refreshEmoji: {
+    fontSize: 14,
+  },
+
   refreshText: {
-    color: "rgba(0,0,0,0.60)",
+    color: colors.textSoft,
     fontWeight: "900",
     textTransform: "lowercase",
+  },
+
+  pressDown: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
   },
 });
