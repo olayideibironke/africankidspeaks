@@ -519,17 +519,6 @@ export default function Home() {
           </Card>
         </View>
 
-        {__DEV__ ? (
-          <Pressable
-            onPress={() => router.push("/design-preview")}
-            style={{ alignSelf: "center", marginTop: spacing.md }}
-            hitSlop={8}
-          >
-            <Text variant="caption" tone="muted">
-              👁 Design preview (dev)
-            </Text>
-          </Pressable>
-        ) : null}
       </Screen>
     </>
   );
