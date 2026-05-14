@@ -14,7 +14,6 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "./theme";
-import Watermark from "./components/watermark";
 import { flashcards } from "./data/flashcards";
 import { hasNativeAudio, type AudioLang } from "./utils/nativeAudio";
 import {
@@ -35,7 +34,7 @@ function normEn(s: any) {
 
 function buildMissingFileSet(lang: AudioLang) {
   const set = new Set<string>();
-  for (const c of flashcards as any[]) {
+  for (const c of flashcards as readonly any[]) {
     const en = normEn(c.en);
     const id = c.id;
     if (!hasNativeAudio({ lang, en, id })) set.add(`${lang}/${en}.mp3`);
@@ -70,7 +69,7 @@ export default function AudioReportScreen() {
     const query = q.trim().toLowerCase();
     const missingAll: Array<{ id: number; en: string; tr: string; file: string }> = [];
 
-    for (const c of flashcards as any[]) {
+    for (const c of flashcards as readonly any[]) {
       const en = normEn(c.en);
       const id = c.id;
       const tr = String(c?.[lang] ?? "");
@@ -164,10 +163,6 @@ export default function AudioReportScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.watermarkWrap} pointerEvents="none">
-        <Watermark />
-      </View>
-
       <ScrollView
         contentContainerStyle={[
           styles.container,

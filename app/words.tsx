@@ -14,7 +14,6 @@ import { Audio } from "expo-av";
 import * as speech from "expo-speech";
 
 import { colors } from "./theme";
-import Watermark from "./components/watermark";
 import { flashcards } from "./data/flashcards";
 import {
   getNativeAudioSource,
@@ -100,7 +99,7 @@ export default function WordsScreen() {
   }, [lang, refreshLearned]);
 
   const allRows = useMemo(() => {
-    return (flashcards as any[]).map((c) => {
+    return (flashcards as readonly any[]).map((c) => {
       const enRaw = String(c.en ?? "");
       const enN = normEn(enRaw);
       const id = Number(c.id);
@@ -206,10 +205,6 @@ export default function WordsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.watermarkWrap} pointerEvents="none">
-        <Watermark />
-      </View>
-
       <ScrollView
         contentContainerStyle={[
           styles.container,

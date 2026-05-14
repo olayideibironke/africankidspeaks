@@ -9,7 +9,7 @@ import { audiomap as generatedAudioMap } from "../data/audiomap";
  * This helper supports both without breaking.
  */
 
-type AudioLang = "yo" | "ig" | "pg";
+export type AudioLang = "yo" | "ig" | "pg";
 
 type FlatAudioMap = Record<string, any>;
 type NestedAudioMap = Record<string, Partial<Record<AudioLang, any>>>;
@@ -150,4 +150,8 @@ export function getNativeAudioSource({
 
 export function shouldUseTTS(args: GetNativeAudioArgs): boolean {
   return !getNativeAudioSource(args);
+}
+
+export function hasNativeAudio(args: GetNativeAudioArgs): boolean {
+  return !!getNativeAudioSource(args);
 }
