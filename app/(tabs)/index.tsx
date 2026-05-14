@@ -1,164 +1,119 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ScrollView,
-  Image,
   Alert,
   Animated,
+  Pressable,
+  StyleSheet,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 
-import { colors } from "../theme";
-import ParentGateModal from "../components/parentgate.modal";
+import { palette } from "../theme/palette";
+import { colors, lang as langTheme, type LangKey } from "../theme/colors";
+import { spacing } from "../theme/spacing";
+import { radii } from "../theme/radii";
+import { shadows } from "../theme/shadows";
+import { duration, easing, pressScale } from "../theme/motion";
+
+import { Screen } from "../components/ui/Screen";
+import { Text } from "../components/ui/Text";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Pill } from "../components/ui/Pill";
+import { ProgressBar } from "../components/ui/ProgressBar";
+import { AudioButton } from "../components/ui/AudioButton";
+import { Mascot } from "../components/illustrations/Mascot";
+import { PatternBackdrop } from "../components/illustrations/PatternBackdrop";
+
 import { flashcards } from "../data/flashcards";
 import { audiomap } from "../data/audiomap.generated";
 import {
-  getLearnedSetForLang,
   clearLearnedForLang,
+  getLearnedSetForLang,
   type LearnedLang,
 } from "../utils/learned";
+import { playWordAudio } from "../utils/play-word-audio";
+import { getDefaultLang, setDefaultLang } from "../hooks/useOnboarding";
 
-type Lang = "yo" | "ig" | "pg";
+import ParentGateModal from "../components/parentgate.modal";
 
-const APP_LOGO = require("../../assets/icon.png");
+type Lang = LangKey;
 
-const LANG_COLORS: Record<
-  Lang,
-  {
-    bg: string;
-    bgSoft: string;
-    chip: string;
-    text: string;
-    accent: string;
-    bubbleA: string;
-    bubbleB: string;
-    ribbon: string;
-    ribbonDark: string;
-    ribbonSoft: string;
-  }
-> = {
-  yo: {
-    bg: "#4F8CFF",
-    bgSoft: "#EAF2FF",
-    chip: "#1C5DE7",
-    text: "#16356C",
-    accent: "#8FC2FF",
-    bubbleA: "rgba(255,255,255,0.22)",
-    bubbleB: "rgba(255,255,255,0.12)",
-    ribbon: "#6f5cff",
-    ribbonDark: "#5440ea",
-    ribbonSoft: "#eee9ff",
-  },
-  ig: {
-    bg: "#8B5CF6",
-    bgSoft: "#F1EAFE",
-    chip: "#6F3DE9",
-    text: "#4D277F",
-    accent: "#C6A8FF",
-    bubbleA: "rgba(255,255,255,0.22)",
-    bubbleB: "rgba(255,255,255,0.12)",
-    ribbon: "#19b67b",
-    ribbonDark: "#0e965f",
-    ribbonSoft: "#e9fff3",
-  },
-  pg: {
-    bg: "#FF9E2C",
-    bgSoft: "#FFF1DF",
-    chip: "#F28400",
-    text: "#844600",
-    accent: "#FFD08A",
-    bubbleA: "rgba(255,255,255,0.22)",
-    bubbleB: "rgba(255,255,255,0.12)",
-    ribbon: "#ff7f50",
-    ribbonDark: "#e25f31",
-    ribbonSoft: "#fff0e8",
-  },
+const LANG_LABELS: Record<Lang, string> = {
+  yo: "Yoruba",
+  ig: "Igbo",
+  pg: "Pidgin",
 };
 
-function titleForLang(lang: Lang) {
-  if (lang === "yo") return "Yoruba";
-  if (lang === "ig") return "Igbo";
-  return "Pidgin";
-}
+const LANG_GREETING: Record<Lang, { native: string; ttsLang: string }> = {
+  yo: { native: "Báwo", ttsLang: "yo-NG" },
+  ig: { native: "Ndewo", ttsLang: "ig-NG" },
+  pg: { native: "How far", ttsLang: "en-NG" },
+};
 
-function shortForLang(lang: Lang) {
-  if (lang === "yo") return "YO";
-  if (lang === "ig") return "IG";
-  return "PG";
-}
+const HOME_LAST_PCT_KEY = (lang: Lang) => `home_last_pct_v1_${lang}`;
+const DAILY_WORD_KEY = "home_daily_word_v1";
 
-function funTaglineForLang(lang: Lang) {
-  if (lang === "yo") return "Play and learn Yoruba words";
-  if (lang === "ig") return "Jump into bright Igbo practice";
-  return "Fun Nigerian Pidgin for kids";
-}
-
-function nextGoalPct(pct: number) {
-  if (pct >= 100) return 100;
-  if (pct < 25) return 25;
-  if (pct < 50) return 50;
-  if (pct < 75) return 75;
-  return 100;
-}
-
-function clampPct(pct: number) {
-  return Math.max(0, Math.min(100, pct));
-}
-
-function toLearnedLang(lang: Lang): LearnedLang {
-  return lang === "yo" ? "yo" : lang === "ig" ? "ig" : "pg";
-}
-
-function hitMilestone(prevPct: number, nextPct: number) {
-  const goals = [25, 50, 75, 100];
-  for (const g of goals) {
-    if (prevPct < g && nextPct >= g) return g;
+function hitMilestone(prev: number, next: number): number | null {
+  for (const g of [25, 50, 75, 100]) {
+    if (prev < g && next >= g) return g;
   }
   return null;
 }
 
-const HOME_LAST_PCT_KEY = (lang: Lang) => `home_last_pct_v1_${lang}`;
-const HOME_RELEASE_READY_SHOWN_KEY = "home_release_ready_shown_v1";
+function pickDailyWordIndex(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % flashcards.length;
+}
 
-export default function HomeScreen() {
+export default function Home() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const [lang, setLang] = useState<Lang>("yo");
-
-  const [learnedYo, setLearnedYo] = useState<Set<number>>(new Set());
-  const [learnedIg, setLearnedIg] = useState<Set<number>>(new Set());
-  const [learnedPg, setLearnedPg] = useState<Set<number>>(new Set());
-
+  const [learned, setLearned] = useState<Record<Lang, Set<number>>>({
+    yo: new Set(),
+    ig: new Set(),
+    pg: new Set(),
+  });
+  const [audioPlaying, setAudioPlaying] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<null | "reset_lang">(null);
+  const [milestone, setMilestone] = useState<number | null>(null);
 
-  const sparkleAnim = useRef(new Animated.Value(0)).current;
-  const bannerAnim = useRef(new Animated.Value(0)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const [milestoneHit, setMilestoneHit] = useState<number | null>(null);
+  const milestoneOpacity = useRef(new Animated.Value(0)).current;
+  const float = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, {
+        Animated.timing(float, {
           toValue: 1,
           duration: 2600,
+          easing: easing.standard,
           useNativeDriver: true,
         }),
-        Animated.timing(floatAnim, {
+        Animated.timing(float, {
           toValue: 0,
           duration: 2600,
+          easing: easing.standard,
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, [floatAnim]);
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [float]);
+
+  useEffect(() => {
+    (async () => {
+      const d = await getDefaultLang();
+      setLang(d);
+    })();
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -167,1395 +122,597 @@ export default function HomeScreen() {
         getLearnedSetForLang("ig"),
         getLearnedSetForLang("pg"),
       ]);
-      setLearnedYo(new Set(yo));
-      setLearnedIg(new Set(ig));
-      setLearnedPg(new Set(pg));
-    } catch {
-      setLearnedYo(new Set());
-      setLearnedIg(new Set());
-      setLearnedPg(new Set());
-    }
+      setLearned({ yo: new Set(yo), ig: new Set(ig), pg: new Set(pg) });
+    } catch {}
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  const totalWords = flashcards.length;
-  const activePalette = LANG_COLORS[lang];
-
-  const learnedSetForSelected = useMemo(() => {
-    if (lang === "yo") return learnedYo;
-    if (lang === "ig") return learnedIg;
-    return learnedPg;
-  }, [lang, learnedYo, learnedIg, learnedPg]);
-
-  const countLearnedForSet = useCallback((set: Set<number>) => {
-    let n = 0;
-    for (const c of flashcards as any[]) {
-      const id = Number(c.id);
-      if (set.has(id)) n++;
-    }
-    return n;
-  }, []);
-
-  const learnedCountSelected = useMemo(() => {
-    return countLearnedForSet(learnedSetForSelected);
-  }, [learnedSetForSelected, countLearnedForSet]);
-
-  const learnedPctSelected = useMemo(() => {
-    return totalWords > 0 ? Math.round((learnedCountSelected / totalWords) * 100) : 0;
-  }, [learnedCountSelected, totalWords]);
-
-  const goalPct = useMemo(() => nextGoalPct(learnedPctSelected), [learnedPctSelected]);
-
-  const nativeCoverageFor = useCallback(
-    (l: Lang) => {
-      let has = 0;
-      for (const c of flashcards as any[]) {
-        const id = Number(c.id);
-        const key = `${l}/${id}`;
-        if ((audiomap as any)[key]) has++;
-      }
-      const pct = totalWords ? Math.round((has / totalWords) * 100) : 0;
-      return { has, pct };
-    },
-    [totalWords]
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
   );
 
-  const nativeCoverage = useMemo(() => nativeCoverageFor(lang), [lang, nativeCoverageFor]);
+  const total = flashcards.length;
 
-  const learnedCounts = useMemo(() => {
-    const yo = countLearnedForSet(learnedYo);
-    const ig = countLearnedForSet(learnedIg);
-    const pg = countLearnedForSet(learnedPg);
-    return { yo, ig, pg };
-  }, [learnedYo, learnedIg, learnedPg, countLearnedForSet]);
+  const learnedCount = useCallback(
+    (l: Lang) => {
+      let n = 0;
+      const s = learned[l];
+      for (const c of flashcards as readonly any[]) {
+        if (s.has(Number(c.id))) n++;
+      }
+      return n;
+    },
+    [learned]
+  );
 
-  const learnedPcts = useMemo(() => {
-    const yo = totalWords ? Math.round((learnedCounts.yo / totalWords) * 100) : 0;
-    const ig = totalWords ? Math.round((learnedCounts.ig / totalWords) * 100) : 0;
-    const pg = totalWords ? Math.round((learnedCounts.pg / totalWords) * 100) : 0;
-    return { yo, ig, pg };
-  }, [learnedCounts, totalWords]);
+  const learnedPct = useCallback(
+    (l: Lang) => (total > 0 ? Math.round((learnedCount(l) / total) * 100) : 0),
+    [learnedCount, total]
+  );
 
-  const overall = useMemo(() => {
-    const denom = totalWords * 3;
-    const num = learnedCounts.yo + learnedCounts.ig + learnedCounts.pg;
-    const pct = denom > 0 ? Math.round((num / denom) * 100) : 0;
-    return { num, denom, pct };
-  }, [learnedCounts, totalWords]);
-
-  const releaseReady = useMemo(() => {
-    const yo = nativeCoverageFor("yo").pct;
-    const ig = nativeCoverageFor("ig").pct;
-    const pg = nativeCoverageFor("pg").pct;
-    return totalWords >= 500 && yo === 100 && ig === 100 && pg === 100;
-  }, [nativeCoverageFor, totalWords]);
-
-  useEffect(() => {
-    (async () => {
-      if (!releaseReady) return;
-      try {
-        const shown = await AsyncStorage.getItem(HOME_RELEASE_READY_SHOWN_KEY);
-        if (shown === "1") return;
-        await AsyncStorage.setItem(HOME_RELEASE_READY_SHOWN_KEY, "1");
-        Alert.alert(
-          "Release Ready ✅",
-          "All native audio is complete for YO / IG / PG. You’re good to ship."
-        );
-      } catch {}
-    })();
-  }, [releaseReady]);
-
-  const runMilestone = useCallback(() => {
-    sparkleAnim.setValue(0);
-    bannerAnim.setValue(0);
-
-    Animated.parallel([
-      Animated.sequence([
-        Animated.timing(sparkleAnim, {
-          toValue: 1,
-          duration: 260,
-          useNativeDriver: true,
-        }),
-        Animated.delay(900),
-        Animated.timing(sparkleAnim, {
-          toValue: 0,
-          duration: 260,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.sequence([
-        Animated.timing(bannerAnim, {
-          toValue: 1,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.delay(1700),
-        Animated.timing(bannerAnim, {
-          toValue: 0,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start(() => {
-      setMilestoneHit(null);
-    });
-  }, [sparkleAnim, bannerAnim]);
+  const selectedCount = useMemo(() => learnedCount(lang), [learnedCount, lang]);
+  const selectedPct = useMemo(() => learnedPct(lang), [learnedPct, lang]);
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(HOME_LAST_PCT_KEY(lang));
         const prev = raw ? parseInt(raw, 10) || 0 : 0;
-        const next = learnedPctSelected;
-
-        const hit = hitMilestone(prev, next);
+        const hit = hitMilestone(prev, selectedPct);
         if (hit) {
-          setMilestoneHit(hit);
-          runMilestone();
+          setMilestone(hit);
+          milestoneOpacity.setValue(0);
+          Animated.sequence([
+            Animated.timing(milestoneOpacity, {
+              toValue: 1,
+              duration: 300,
+              easing: easing.emphasized,
+              useNativeDriver: true,
+            }),
+            Animated.delay(2000),
+            Animated.timing(milestoneOpacity, {
+              toValue: 0,
+              duration: 300,
+              easing: easing.standard,
+              useNativeDriver: true,
+            }),
+          ]).start(() => setMilestone(null));
         }
-
-        await AsyncStorage.setItem(HOME_LAST_PCT_KEY(lang), String(next));
+        await AsyncStorage.setItem(HOME_LAST_PCT_KEY(lang), String(selectedPct));
       } catch {}
     })();
-  }, [lang, learnedPctSelected, runMilestone]);
+  }, [lang, selectedPct, milestoneOpacity]);
 
-  const goLearn = useCallback(() => {
-    router.push({ pathname: "/learn", params: { lang } });
-  }, [router, lang]);
+  const dailyWord = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const idx = pickDailyWordIndex(today + lang);
+    return flashcards[idx] as any;
+  }, [lang]);
 
-  const goGames = useCallback(() => {
-    router.push({ pathname: "/games", params: { lang } });
-  }, [router, lang]);
-
-  const openWordsAll = useCallback(() => {
-    router.push({ pathname: "/words", params: { lang } });
-  }, [router, lang]);
-
-  const openWordsMissing = useCallback(() => {
-    router.push({ pathname: "/words", params: { lang, onlyMissing: "1" } });
-  }, [router, lang]);
-
-  const openWordsLearned = useCallback(() => {
-    router.push({ pathname: "/words", params: { lang, onlyLearned: "1" } });
-  }, [router, lang]);
-
-  const openAudioReport = useCallback(() => {
-    router.push({ pathname: "/audio-report", params: { lang } });
-  }, [router, lang]);
-
-  const requestResetLang = () => {
-    setPendingAction("reset_lang");
-    setGateOpen(true);
+  const playDaily = async () => {
+    setAudioPlaying(true);
+    try {
+      await playWordAudio({
+        lang,
+        id: dailyWord.id,
+        ttsText: dailyWord[lang],
+        ttsLang: LANG_GREETING[lang].ttsLang,
+      });
+    } catch {}
+    setTimeout(() => setAudioPlaying(false), 2200);
   };
 
-  const onGateCancel = () => {
-    setGateOpen(false);
-    setPendingAction(null);
+  const switchLang = async (l: Lang) => {
+    setLang(l);
+    try {
+      await setDefaultLang(l);
+    } catch {}
   };
 
-  const onGatePassed = async () => {
-    const action = pendingAction;
+  const tBg = langTheme[lang].surface;
+  const tPrimary = langTheme[lang].primary;
+  const tDeep = langTheme[lang].primaryDeep;
+  const tOn = langTheme[lang].onSurface;
+
+  const onParentReset = async () => {
     setGateOpen(false);
-    setPendingAction(null);
-
-    if (action === "reset_lang") {
-      const l = toLearnedLang(lang);
-      await clearLearnedForLang(l);
-
-      try {
-        await AsyncStorage.setItem(HOME_LAST_PCT_KEY(lang), "0");
-      } catch {}
-
-      await refresh();
-      setMilestoneHit(null);
-      Alert.alert("Reset", `${titleForLang(lang)} learned progress cleared.`);
-    }
+    try {
+      await clearLearnedForLang(lang as LearnedLang);
+      await AsyncStorage.setItem(HOME_LAST_PCT_KEY(lang), "0");
+    } catch {}
+    await refresh();
+    Alert.alert("Reset", `${LANG_LABELS[lang]} progress cleared.`);
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.bgGlowTop} />
-      <View style={styles.bgGlowRight} />
-      <View style={styles.bgGlowBottom} />
-      <View style={styles.bgGlowCenter} />
-
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.milestoneWrap,
-          {
-            opacity: bannerAnim,
-            transform: [
-              {
-                translateY: bannerAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-16, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <View style={[styles.milestoneCard, { backgroundColor: activePalette.ribbon }]}>
-          <Text style={styles.milestoneCardText}>
-            {titleForLang(lang)} hit {milestoneHit ?? 0}% 🎉
-          </Text>
-        </View>
-      </Animated.View>
-
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.sparkleWrap,
-          {
-            opacity: sparkleAnim,
-            transform: [
-              {
-                scale: sparkleAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.82, 1.08],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <Text style={styles.sparkleText}>✨ 🎉 ✨</Text>
-      </Animated.View>
-
+    <>
       {gateOpen ? (
         <ParentGateModal
           visible={gateOpen}
-          onClose={onGateCancel}
-          onCancel={onGateCancel}
-          onSuccess={onGatePassed}
-          onPassed={onGatePassed}
+          onClose={() => setGateOpen(false)}
+          onCancel={() => setGateOpen(false)}
+          onSuccess={onParentReset}
+          onPassed={onParentReset}
           title="parent gate"
-          subtitle={`solve the math to reset ${titleForLang(lang).toLowerCase()} learned progress`}
+          subtitle={`solve the math to reset ${LANG_LABELS[lang].toLowerCase()} progress`}
         />
       ) : null}
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingTop: insets.top + 6,
-          paddingBottom: insets.bottom + 112,
-          paddingHorizontal: 16,
-        }}
-        showsVerticalScrollIndicator={false}
+      <Screen
+        background={colors.background}
+        scroll
+        padded={false}
+        bottomInsetExtra={100}
       >
-        <View style={styles.headerRibbonRow}>
-          <View
-            style={[
-              styles.headerRibbon,
-              {
-                backgroundColor: activePalette.ribbonSoft,
-                borderColor: activePalette.ribbon,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.headerRibbonCap,
-                { backgroundColor: activePalette.ribbonDark },
-              ]}
-            />
-            <Text style={[styles.headerRibbonEmoji, { color: activePalette.ribbonDark }]}>
-              ✨
-            </Text>
-            <Text style={[styles.headerRibbonText, { color: activePalette.ribbonDark }]}>
-              home
-            </Text>
+        <View style={styles.topRow}>
+          <View>
+            <Text variant="overline" tone="muted">Welcome back</Text>
+            <Text variant="title">Let's learn today</Text>
           </View>
+          <Pressable
+            onPress={() => router.push("/(tabs)/settings")}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressDown]}
+            hitSlop={8}
+          >
+            <Ionicons name="person-circle-outline" size={32} color={palette.slate} />
+          </Pressable>
         </View>
 
-        <View style={[styles.hero, { backgroundColor: activePalette.bg }]}>
+        {milestone ? (
           <Animated.View
             pointerEvents="none"
-            style={[
-              styles.heroBubbleLg,
-              {
-                backgroundColor: activePalette.bubbleA,
+            style={[styles.milestoneBar, { opacity: milestoneOpacity, backgroundColor: tPrimary }]}
+          >
+            <Text variant="bodyStrong" style={{ color: palette.white }}>
+              {LANG_LABELS[lang]} · {milestone}% milestone reached
+            </Text>
+          </Animated.View>
+        ) : null}
+
+        <View style={[styles.hero, { backgroundColor: tBg }]}>
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            <PatternBackdrop
+              variant="adire-dots"
+              color={tPrimary}
+              width={520}
+              height={420}
+              opacity={0.18}
+            />
+          </View>
+
+          <View style={styles.heroTop}>
+            <Pill
+              label={`${LANG_LABELS[lang]} · ${lang.toUpperCase()}`}
+              variant="solid"
+              bg={tPrimary}
+              color={palette.white}
+            />
+            <Text variant="caption" tone="soft">
+              {selectedCount}/{total} words
+            </Text>
+          </View>
+
+          <View style={styles.heroMiddle}>
+            <View style={{ flex: 1 }}>
+              <Text variant="display3" style={{ color: tOn }}>
+                {selectedPct === 0
+                  ? "Start your first lesson"
+                  : selectedPct === 100
+                  ? "You mastered it"
+                  : "Continue learning"}
+              </Text>
+              <Text variant="body" tone="soft" style={{ marginTop: spacing.xs }}>
+                {selectedPct === 0
+                  ? "Tap a sound, repeat it back, and keep going."
+                  : `${selectedPct}% of ${LANG_LABELS[lang]} learned so far.`}
+              </Text>
+            </View>
+
+            <Animated.View
+              style={{
                 transform: [
                   {
-                    translateY: floatAnim.interpolate({
+                    translateY: float.interpolate({
                       inputRange: [0, 1],
                       outputRange: [0, -8],
                     }),
                   },
                 ],
-              },
-            ]}
-          />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.heroBubbleMd,
-              {
-                backgroundColor: activePalette.bubbleB,
-                transform: [
-                  {
-                    translateY: floatAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 10],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.heroBubbleSm,
-              {
-                backgroundColor: activePalette.bubbleA,
-                transform: [
-                  {
-                    translateY: floatAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, -6],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-
-          <View style={styles.heroHeaderRow}>
-            <View style={styles.heroLogoPill}>
-              <Image source={APP_LOGO} style={styles.heroLogo} resizeMode="contain" />
-            </View>
-
-            <View style={styles.heroStarsWrap}>
-              <Text style={styles.heroStars}>⭐ ⭐ ⭐</Text>
-            </View>
+              }}
+            >
+              <Mascot size={130} expression="happy" accent={lang} />
+            </Animated.View>
           </View>
 
-          <View style={styles.heroCopyWrap}>
-            <Text style={styles.heroEyebrow}>
-              {releaseReady ? "Release ready" : "Play • listen • learn"}
+          <View style={styles.heroProgressRow}>
+            <View style={{ flex: 1 }}>
+              <ProgressBar
+                value={selectedPct}
+                fillColor={tPrimary}
+                trackColor="rgba(27, 20, 40, 0.08)"
+                height={10}
+              />
+            </View>
+            <Text variant="bodyStrong" style={{ color: tDeep, minWidth: 48, textAlign: "right" }}>
+              {selectedPct}%
             </Text>
-
-            <Text style={styles.heroTitle}>AfricanKidSpeaks</Text>
-            <Text style={styles.heroSubtitle}>{funTaglineForLang(lang)}</Text>
-
-            <View style={styles.heroPillsRow}>
-              <View style={styles.heroDarkPill}>
-                <Text style={styles.heroDarkPillText}>{titleForLang(lang)}</Text>
-              </View>
-              <View style={styles.heroSoftPill}>
-                <Text style={styles.heroSoftPillText}>{nativeCoverage.pct}% native audio</Text>
-              </View>
-            </View>
           </View>
 
-          <View style={styles.heroMascotRow}>
-            <View style={styles.heroMascotBubble}>
-              <Text style={styles.heroMascotEmoji}>🦁</Text>
-            </View>
-            <View style={styles.heroMascotBubbleSmall}>
-              <Text style={styles.heroMascotEmojiSmall}>🎵</Text>
-            </View>
-            <View style={styles.heroMascotBubbleSmallAlt}>
-              <Text style={styles.heroMascotEmojiSmall}>✨</Text>
-            </View>
-          </View>
+          <Button
+            label={selectedPct === 0 ? "Start learning" : "Continue learning"}
+            onPress={() => router.push({ pathname: "/(tabs)/learn", params: { lang } })}
+            variant="primary"
+            fullWidth
+            size="lg"
+            style={{ marginTop: spacing.lg, backgroundColor: tPrimary } as any}
+          />
         </View>
 
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Pick your language</Text>
-          <Text style={styles.sectionHint}>Kids love tapping colorful cards</Text>
-        </View>
-
-        <View style={styles.languageGrid}>
+        <View style={styles.langPicker}>
           {(["yo", "ig", "pg"] as Lang[]).map((l) => {
-            const palette = LANG_COLORS[l];
             const active = l === lang;
-            const cov = nativeCoverageFor(l);
-
+            const t = langTheme[l];
             return (
               <Pressable
                 key={l}
-                onPress={() => setLang(l)}
+                onPress={() => switchLang(l)}
                 style={({ pressed }) => [
-                  styles.languageCard,
+                  styles.langChip,
                   {
-                    backgroundColor: palette.bgSoft,
-                    borderColor: active ? palette.bg : "#e6ebf3",
+                    backgroundColor: active ? t.primary : palette.white,
+                    borderColor: active ? t.primary : palette.hairline,
                   },
                   pressed && styles.pressDown,
                 ]}
               >
-                <Animated.View
-                  style={[
-                    styles.languageBlob,
-                    {
-                      backgroundColor: palette.accent,
-                      transform: active
-                        ? [
-                            {
-                              translateY: floatAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [0, -4],
-                              }),
-                            },
-                          ]
-                        : [{ translateY: 0 }],
-                    },
-                  ]}
-                />
-
-                <View style={styles.languageTop}>
-                  <Text style={[styles.languageTag, { backgroundColor: palette.chip }]}>
-                    {shortForLang(l)}
-                  </Text>
-                  {active ? (
-                    <Text style={styles.languageSelected}>●</Text>
-                  ) : (
-                    <Text style={styles.languageIdle}>○</Text>
-                  )}
-                </View>
-
-                <Text style={[styles.languageTitle, { color: palette.text }]}>{titleForLang(l)}</Text>
-                <Text style={[styles.languageSub, { color: palette.text }]}>
-                  Native audio <Text style={styles.languageSubStrong}>{cov.pct}%</Text>
+                <Text
+                  variant="bodyStrong"
+                  style={{
+                    color: active ? palette.white : palette.ink,
+                    fontSize: 13,
+                  }}
+                >
+                  {LANG_LABELS[l]}
                 </Text>
-                <Text style={styles.languageFun}>{funTaglineForLang(l)}</Text>
+                <Text
+                  variant="caption"
+                  style={{
+                    color: active ? "rgba(255,255,255,0.85)" : palette.slate,
+                    marginTop: 2,
+                  }}
+                >
+                  {learnedPct(l)}%
+                </Text>
               </Pressable>
             );
           })}
-
-          <View style={[styles.languageCard, styles.moreCard]}>
-            <View style={styles.morePlus}>
-              <Text style={styles.morePlusText}>+</Text>
-            </View>
-            <Text style={styles.moreTitle}>More soon</Text>
-            <Text style={styles.moreSub}>New languages are coming in a future phase.</Text>
-          </View>
         </View>
 
-        <View style={styles.actionRow}>
-          <Pressable
-            onPress={goLearn}
-            style={({ pressed }) => [
-              styles.mainActionCard,
-              { backgroundColor: activePalette.bg },
-              pressed && styles.pressDown,
-            ]}
-          >
-            <Text style={styles.mainActionEmoji}>📚</Text>
-            <Text style={styles.mainActionTitle}>Start learning</Text>
-            <Text style={styles.mainActionSub}>Tap, reveal, play, and keep going</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={goGames}
-            style={({ pressed }) => [
-              styles.mainActionCard,
-              { backgroundColor: "#111111" },
-              pressed && styles.pressDown,
-            ]}
-          >
-            <Text style={styles.mainActionEmoji}>🎮</Text>
-            <Text style={styles.mainActionTitle}>Play games</Text>
-            <Text style={styles.mainActionSub}>Sound quiz and fun review time</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.progressShell}>
-          <View style={styles.progressHeaderRow}>
-            <Text style={styles.progressTitle}>Your progress</Text>
-            <Text style={styles.progressHint}>{titleForLang(lang)}</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text variant="overline" tone="muted">Word of the day</Text>
           </View>
 
-          <View style={styles.progressMainCard}>
-            <View style={styles.progressMainTop}>
-              <View style={styles.progressBigWrap}>
-                <Text style={styles.progressBig}>{learnedPctSelected}%</Text>
-                <Text style={styles.progressBigSub}>learned</Text>
-              </View>
-
-              <View style={styles.progressInfoWrap}>
-                <Text style={styles.progressInfoTitle}>Great job so far 🎉</Text>
-                <Text style={styles.progressInfoSub}>
-                  {learnedCountSelected}/{totalWords} words learned
+          <Card variant="elevated" padding="lg" radius="xl2">
+            <View style={styles.dailyRow}>
+              <View style={{ flex: 1 }}>
+                <Text variant="caption" tone="muted">
+                  {LANG_LABELS[lang]} · {String(dailyWord.category ?? "").toUpperCase()}
                 </Text>
-                <Text style={styles.progressInfoSub}>
-                  Next goal: <Text style={styles.progressInfoStrong}>{goalPct}%</Text>
+                <Text variant="display3" style={{ marginTop: spacing.xs }}>
+                  {dailyWord[lang]}
+                </Text>
+                <Text variant="subtitle" tone="soft">
+                  {dailyWord.en}
                 </Text>
               </View>
-            </View>
 
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${clampPct(learnedPctSelected)}%`,
-                    backgroundColor: activePalette.bg,
-                  },
-                ]}
+              <AudioButton
+                onPress={playDaily}
+                playing={audioPlaying}
+                tint={tPrimary}
+                size={64}
+                accessibilityLabel={`Play ${dailyWord[lang]}`}
               />
             </View>
+          </Card>
+        </View>
 
-            <Pressable
-              onPress={openWordsLearned}
-              style={({ pressed }) => [styles.learnedButton, pressed && styles.pressDown]}
-            >
-              <Text style={styles.learnedButtonText}>Open learned words</Text>
-            </Pressable>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text variant="overline" tone="muted">Quick actions</Text>
           </View>
 
-          <View style={styles.kpiMiniRow}>
-            <View style={styles.kpiMiniCard}>
-              <Text style={styles.kpiMiniLabel}>Overall</Text>
-              <Text style={styles.kpiMiniValue}>{overall.pct}%</Text>
-              <Text style={styles.kpiMiniSub}>
-                {overall.num}/{overall.denom}
-              </Text>
-            </View>
-
-            <View style={styles.kpiMiniCard}>
-              <Text style={styles.kpiMiniLabel}>Native audio</Text>
-              <Text style={styles.kpiMiniValue}>{nativeCoverage.pct}%</Text>
-              <Text style={styles.kpiMiniSub}>
-                {nativeCoverage.has}/{totalWords}
-              </Text>
-            </View>
+          <View style={styles.actionGrid}>
+            <ActionTile
+              icon="book"
+              label="Learn"
+              hint="Flashcards"
+              accent={palette.clay}
+              tint={palette.claySoft}
+              onPress={() => router.push({ pathname: "/(tabs)/learn", params: { lang } })}
+            />
+            <ActionTile
+              icon="game-controller"
+              label="Games"
+              hint="Practice"
+              accent={palette.indigo}
+              tint={palette.indigoSoft}
+              onPress={() => router.push({ pathname: "/(tabs)/games", params: { lang } })}
+            />
+            <ActionTile
+              icon="list"
+              label="All words"
+              hint="Browse"
+              accent={palette.mint}
+              tint={palette.mintSoft}
+              onPress={() => router.push({ pathname: "/words", params: { lang } })}
+            />
+            <ActionTile
+              icon="settings"
+              label="Parent zone"
+              hint="Controls"
+              accent={palette.plum}
+              tint={palette.plumSoft}
+              onPress={() => router.push("/(tabs)/settings")}
+            />
           </View>
         </View>
 
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Language stars</Text>
-          <Text style={styles.sectionHint}>A quick look at each track</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text variant="overline" tone="muted">Your progress</Text>
+          </View>
+
+          <Card variant="elevated" padding="lg" radius="xl2">
+            {(["yo", "ig", "pg"] as Lang[]).map((l, i) => {
+              const t = langTheme[l];
+              const c = learnedCount(l);
+              const p = learnedPct(l);
+              return (
+                <View
+                  key={l}
+                  style={[styles.progressRow, i > 0 && { marginTop: spacing.md }]}
+                >
+                  <View style={[styles.langBadge, { backgroundColor: t.primary }]}>
+                    <Text variant="overline" style={{ color: palette.white, fontSize: 10 }}>
+                      {l.toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.rowBetween}>
+                      <Text variant="bodyStrong">{LANG_LABELS[l]}</Text>
+                      <Text variant="caption" tone="soft">
+                        {c}/{total}
+                      </Text>
+                    </View>
+                    <View style={{ marginTop: 6 }}>
+                      <ProgressBar value={p} fillColor={t.primary} height={6} />
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </Card>
         </View>
 
-        <View style={styles.breakdownRow}>
-          {(
-            [
-              { k: "yo" as Lang, label: "YO", pct: learnedPcts.yo, count: learnedCounts.yo },
-              { k: "ig" as Lang, label: "IG", pct: learnedPcts.ig, count: learnedCounts.ig },
-              { k: "pg" as Lang, label: "PG", pct: learnedPcts.pg, count: learnedCounts.pg },
-            ] as const
-          ).map(({ k, label, pct, count }) => {
-            const palette = LANG_COLORS[k];
-            const active = k === lang;
-
-            return (
-              <View
-                key={k}
-                style={[
-                  styles.breakdownCard,
-                  { backgroundColor: palette.bgSoft, borderColor: active ? palette.bg : "#e6ebf3" },
-                ]}
-              >
-                <View style={styles.breakdownTop}>
-                  <Text style={[styles.breakdownTag, { backgroundColor: palette.chip }]}>{label}</Text>
-                  <Text style={[styles.breakdownPct, { color: palette.text }]}>{pct}%</Text>
-                </View>
-
-                <Text style={[styles.breakdownCount, { color: palette.text }]}>
-                  {count}/{totalWords} learned
-                </Text>
-
-                <View style={styles.breakdownTrack}>
-                  <View
-                    style={[
-                      styles.breakdownFill,
-                      { width: `${clampPct(pct)}%`, backgroundColor: palette.bg },
-                    ]}
-                  />
-                </View>
+        <View style={styles.section}>
+          <Card variant="soft" tint={palette.bone} padding="lg" radius="xl2">
+            <View style={styles.parentRow}>
+              <View style={styles.parentIcon}>
+                <Ionicons name="shield-checkmark" size={22} color={palette.indigo} />
               </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.utilityShell}>
-          <Text style={styles.utilityTitle}>More to explore</Text>
-
-          <View style={styles.utilityRow}>
-            <Pressable
-              onPress={openWordsAll}
-              style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
-            >
-              <Text style={styles.utilityPillEmoji}>📝</Text>
-              <Text style={styles.utilityPillText}>Words</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={openWordsMissing}
-              style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
-            >
-              <Text style={styles.utilityPillEmoji}>🔊</Text>
-              <Text style={styles.utilityPillText}>Missing audio</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.utilityRow}>
-            <Pressable
-              onPress={openAudioReport}
-              style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
-            >
-              <Text style={styles.utilityPillEmoji}>📊</Text>
-              <Text style={styles.utilityPillText}>Audio report</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={refresh}
-              style={({ pressed }) => [styles.utilityPill, pressed && styles.pressDown]}
-            >
-              <Text style={styles.utilityPillEmoji}>🔄</Text>
-              <Text style={styles.utilityPillText}>Refresh</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.parentShell}>
-          <View style={styles.parentTop}>
-            <View style={styles.parentIconWrap}>
-              <Text style={styles.parentIcon}>👨‍👩‍👧</Text>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyStrong">Parent tools</Text>
+                <Text variant="caption" tone="soft">
+                  Reset progress, change audio, manage settings.
+                </Text>
+              </View>
+              <Button
+                label="Reset"
+                size="sm"
+                variant="ghost"
+                onPress={() => setGateOpen(true)}
+              />
             </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={styles.parentTitle}>Parent tools</Text>
-              <Text style={styles.parentSub}>
-                Progress is tracked separately for Yoruba, Igbo, and Pidgin.
-              </Text>
-            </View>
-          </View>
-
-          <Pressable
-            onPress={requestResetLang}
-            style={({ pressed }) => [styles.resetButton, pressed && styles.pressDown]}
-          >
-            <Text style={styles.resetButtonText}>Parent reset</Text>
-          </Pressable>
+          </Card>
         </View>
 
         {__DEV__ ? (
           <Pressable
             onPress={() => router.push("/design-preview")}
-            style={({ pressed }) => [
-              {
-                marginTop: 18,
-                alignSelf: "center",
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                borderRadius: 999,
-                backgroundColor: "rgba(255,255,255,0.18)",
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
+            style={{ alignSelf: "center", marginTop: spacing.md }}
+            hitSlop={8}
           >
-            <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 12 }}>
-              👁  Design preview (dev only)
+            <Text variant="caption" tone="muted">
+              👁 Design preview (dev)
             </Text>
           </Pressable>
         ) : null}
-      </ScrollView>
-    </View>
+      </Screen>
+    </>
+  );
+}
+
+function ActionTile({
+  icon,
+  label,
+  hint,
+  accent,
+  tint,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  hint: string;
+  accent: string;
+  tint: string;
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animate = (to: number) =>
+    Animated.timing(scale, {
+      toValue: to,
+      duration: duration.fast,
+      easing: easing.standard,
+      useNativeDriver: true,
+    }).start();
+
+  return (
+    <Animated.View style={[{ transform: [{ scale }] }, styles.actionTileWrap]}>
+      <Pressable
+        onPressIn={() => animate(pressScale.medium)}
+        onPressOut={() => animate(1)}
+        onPress={onPress}
+        style={[styles.actionTile, shadows.sm, { backgroundColor: tint }]}
+      >
+        <View style={[styles.actionIcon, { backgroundColor: accent }]}>
+          <Ionicons name={icon} size={20} color={palette.white} />
+        </View>
+        <Text variant="bodyStrong" style={{ marginTop: spacing.md }}>
+          {label}
+        </Text>
+        <Text variant="caption" tone="soft">
+          {hint}
+        </Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.homeBg,
-  },
-
-  scroll: {
-    flex: 1,
-  },
-
-  bgGlowTop: {
-    position: "absolute",
-    top: -40,
-    left: -20,
-    width: 200,
-    height: 200,
-    borderRadius: 999,
-    backgroundColor: "#9b8cff",
-    opacity: 0.24,
-  },
-  bgGlowRight: {
-    position: "absolute",
-    top: 150,
-    right: -45,
-    width: 210,
-    height: 210,
-    borderRadius: 999,
-    backgroundColor: "#7fe1ff",
-    opacity: 0.18,
-  },
-  bgGlowBottom: {
-    position: "absolute",
-    bottom: 110,
-    left: -45,
-    width: 210,
-    height: 210,
-    borderRadius: 999,
-    backgroundColor: "#ff9ecb",
-    opacity: 0.18,
-  },
-  bgGlowCenter: {
-    position: "absolute",
-    top: 340,
-    left: "35%",
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    backgroundColor: "#ffd86c",
-    opacity: 0.12,
-  },
-
-  headerRibbonRow: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  headerRibbon: {
-    minWidth: 128,
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingLeft: 16,
-    paddingRight: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 2,
-    position: "relative",
   },
-  headerRibbonCap: {
-    position: "absolute",
-    left: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  headerRibbonEmoji: {
-    fontSize: 14,
-  },
-  headerRibbonText: {
-    fontSize: 15,
-    fontWeight: "900",
-    textTransform: "lowercase",
+  pressDown: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
   },
 
-  milestoneWrap: {
-    position: "absolute",
-    top: 10,
-    left: 16,
-    right: 16,
-    zIndex: 20,
+  milestoneBar: {
+    marginTop: spacing.md,
+    marginHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
     alignItems: "center",
-  },
-  milestoneCard: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-  },
-  milestoneCardText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  sparkleWrap: {
-    position: "absolute",
-    top: 78,
-    left: 0,
-    right: 0,
-    zIndex: 19,
-    alignItems: "center",
-  },
-  sparkleText: {
-    fontSize: 24,
   },
 
   hero: {
-    marginTop: 2,
-    borderRadius: 34,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 20,
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.xl,
+    borderRadius: radii.xl3,
+    padding: spacing.xl,
     overflow: "hidden",
   },
-  heroBubbleLg: {
-    position: "absolute",
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    top: -22,
-    right: -18,
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  heroBubbleMd: {
-    position: "absolute",
-    width: 96,
-    height: 96,
-    borderRadius: 999,
-    bottom: 26,
-    left: -10,
+  heroMiddle: {
+    marginTop: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
-  heroBubbleSm: {
-    position: "absolute",
-    width: 54,
-    height: 54,
-    borderRadius: 999,
-    top: 86,
-    right: 90,
+  heroProgressRow: {
+    marginTop: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
 
-  heroHeaderRow: {
+  langPicker: {
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.xl,
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  langChip: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
     alignItems: "center",
   },
-  heroLogoPill: {
-    width: 62,
-    height: 62,
+
+  section: {
+    marginTop: spacing.xl2,
+    paddingHorizontal: spacing.xl,
+  },
+  sectionHeader: {
+    marginBottom: spacing.md,
+  },
+  dailyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+  },
+  actionTileWrap: {
+    width: "47%",
+  },
+  actionTile: {
+    borderRadius: radii.xl2,
+    padding: spacing.lg,
+    minHeight: 120,
+  },
+  actionIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.45)",
-  },
-  heroLogo: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-  },
-  heroStarsWrap: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  heroStars: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "900",
   },
 
-  heroCopyWrap: {
-    marginTop: 16,
-  },
-  heroEyebrow: {
-    color: "#ffffff",
-    opacity: 0.92,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    fontSize: 12,
-    letterSpacing: 0.5,
-  },
-  heroTitle: {
-    marginTop: 8,
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-  heroSubtitle: {
-    marginTop: 8,
-    fontSize: 16,
-    lineHeight: 23,
-    color: "#ffffff",
-    opacity: 0.96,
-    fontWeight: "700",
-    maxWidth: "88%",
-  },
-
-  heroPillsRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  heroDarkPill: {
-    backgroundColor: "#111111",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  heroDarkPillText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  heroSoftPill: {
-    backgroundColor: "#ffffff",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  heroSoftPillText: {
-    color: "#111111",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  heroMascotRow: {
-    marginTop: 18,
+  progressRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: spacing.md,
   },
-  heroMascotBubble: {
-    width: 66,
-    height: 66,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroMascotBubbleSmall: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroMascotBubbleSmallAlt: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroMascotEmoji: {
-    fontSize: 30,
-  },
-  heroMascotEmojiSmall: {
-    fontSize: 18,
-  },
-
-  sectionRow: {
-    marginTop: 22,
-    marginBottom: 12,
+  rowBetween: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
   },
-  sectionTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  sectionHint: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "right",
-    maxWidth: 120,
-  },
-
-  languageGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  languageCard: {
-    width: "48%",
-    borderRadius: 28,
-    borderWidth: 2,
-    padding: 16,
-    minHeight: 184,
-    overflow: "hidden",
-  },
-  languageBlob: {
-    position: "absolute",
-    width: 110,
-    height: 110,
-    borderRadius: 999,
-    top: -18,
-    right: -18,
-  },
-  languageTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  languageTag: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-  languageSelected: {
-    color: "#1864d9",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  languageIdle: {
-    color: "#c2c8d1",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  languageTitle: {
-    marginTop: 18,
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  languageSub: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  languageSubStrong: {
-    color: "#111111",
-    fontWeight: "900",
-  },
-  languageFun: {
-    marginTop: 12,
-    color: "#667085",
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
-    maxWidth: "84%",
-  },
-
-  moreCard: {
-    backgroundColor: colors.homeBgSoft,
-    borderColor: "rgba(255,255,255,0.14)",
-    justifyContent: "center",
-  },
-  morePlus: {
-    width: 54,
-    height: 54,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.12)",
+  langBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
-  morePlusText: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  moreTitle: {
-    marginTop: 20,
-    color: "#ffffff",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  moreSub: {
-    marginTop: 8,
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "700",
-    maxWidth: "85%",
-  },
 
-  actionRow: {
-    marginTop: 18,
-    gap: 12,
-  },
-  mainActionCard: {
-    borderRadius: 30,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  mainActionEmoji: {
-    fontSize: 26,
-  },
-  mainActionTitle: {
-    marginTop: 10,
-    color: "#ffffff",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  mainActionSub: {
-    marginTop: 6,
-    color: "rgba(255,255,255,0.88)",
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: "700",
-  },
-
-  progressShell: {
-    marginTop: 18,
-  },
-  progressHeaderRow: {
-    marginBottom: 12,
+  parentRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-  },
-  progressTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  progressHint: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  progressMainCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-    padding: 18,
-  },
-  progressMainTop: {
-    flexDirection: "row",
-    gap: 14,
-    alignItems: "center",
-  },
-  progressBigWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 999,
-    backgroundColor: "#f7f8fa",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-  },
-  progressBig: {
-    color: "#111111",
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  progressBigSub: {
-    marginTop: 2,
-    color: "#667085",
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  progressInfoWrap: {
-    flex: 1,
-  },
-  progressInfoTitle: {
-    color: "#111111",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  progressInfoSub: {
-    marginTop: 5,
-    color: "#667085",
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: "700",
-  },
-  progressInfoStrong: {
-    color: "#111111",
-    fontWeight: "900",
-  },
-  progressTrack: {
-    marginTop: 16,
-    height: 14,
-    borderRadius: 999,
-    backgroundColor: "#e9edf5",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 999,
-  },
-  learnedButton: {
-    marginTop: 16,
-    alignSelf: "flex-start",
-    backgroundColor: "#111111",
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-  },
-  learnedButtonText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  kpiMiniRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 12,
-  },
-  kpiMiniCard: {
-    flex: 1,
-    backgroundColor: "#f7f8fa",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "#eceff4",
-    padding: 16,
-  },
-  kpiMiniLabel: {
-    color: "#667085",
-    fontSize: 12,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  kpiMiniValue: {
-    marginTop: 8,
-    color: "#111111",
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  kpiMiniSub: {
-    marginTop: 4,
-    color: "#667085",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  breakdownRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  breakdownCard: {
-    flex: 1,
-    borderRadius: 24,
-    borderWidth: 2,
-    padding: 14,
-  },
-  breakdownTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  breakdownTag: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 11,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-  breakdownPct: {
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  breakdownCount: {
-    marginTop: 10,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
-  },
-  breakdownTrack: {
-    marginTop: 12,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.75)",
-    overflow: "hidden",
-  },
-  breakdownFill: {
-    height: "100%",
-    borderRadius: 999,
-  },
-
-  utilityShell: {
-    marginTop: 18,
-    backgroundColor: colors.homeBgSoft,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    padding: 18,
-  },
-  utilityTitle: {
-    color: "#ffffff",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  utilityRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 10,
-  },
-  utilityPill: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#e7ebf2",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 74,
-  },
-  utilityPillEmoji: {
-    fontSize: 18,
-  },
-  utilityPillText: {
-    marginTop: 6,
-    color: "#111111",
-    fontWeight: "900",
-    fontSize: 13,
-    textAlign: "center",
-  },
-
-  parentShell: {
-    marginTop: 18,
-    backgroundColor: "#FFF1DF",
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: "#FFD9AA",
-    padding: 18,
-  },
-  parentTop: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-  },
-  parentIconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 999,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
+    gap: spacing.md,
   },
   parentIcon: {
-    fontSize: 24,
-  },
-  parentTitle: {
-    color: "#844600",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  parentSub: {
-    marginTop: 6,
-    color: "#844600",
-    opacity: 0.86,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
-  },
-  resetButton: {
-    marginTop: 16,
-    alignSelf: "flex-start",
-    backgroundColor: "#111111",
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-  },
-  resetButtonText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 13,
-    textTransform: "uppercase",
-  },
-
-  pressDown: {
-    opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: palette.indigoSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
