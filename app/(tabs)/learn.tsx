@@ -4,6 +4,7 @@ import {
   Animated,
   Pressable,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -13,17 +14,16 @@ import * as haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 
 import { palette } from "../theme/palette";
-import { colors, lang as langTheme, type LangKey } from "../theme/colors";
+import { lang as langTheme, type LangKey } from "../theme/colors";
 import { spacing } from "../theme/spacing";
 import { radii } from "../theme/radii";
 import { shadows } from "../theme/shadows";
-import { duration, easing, pressScale } from "../theme/motion";
+import { easing, pressScale } from "../theme/motion";
 
 import { Text } from "../components/ui/Text";
 import { Pill } from "../components/ui/Pill";
 import { AudioButton } from "../components/ui/AudioButton";
 import { ProgressBar } from "../components/ui/ProgressBar";
-import { Mascot } from "../components/illustrations/Mascot";
 import { PatternBackdrop } from "../components/illustrations/PatternBackdrop";
 
 import { flashcards } from "../data/flashcards";
@@ -64,7 +64,12 @@ function prettyWord(raw: string, id: number) {
 export default function LearnTabScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const params = useLocalSearchParams<{ lang?: string }>();
+
+  const isCompact = height < 760;
+  const cardMaxHeight = Math.max(330, Math.min(isCompact ? 370 : 430, height * 0.48));
+  const audioSize = isCompact ? 62 : 68;
 
   const [lang, setLang] = useState<LangKey>("yo");
   const [revealed, setRevealed] = useState(false);
@@ -146,11 +151,13 @@ export default function LearnTabScreen() {
     try {
       speech.stop();
     } catch {}
-    const text = revealed ? tr || en : tr || en;
+
+    const text = tr || en;
     if (!text) {
       setAudioPlaying(false);
       return;
     }
+
     try {
       await playWordAudio({
         lang,
@@ -160,8 +167,9 @@ export default function LearnTabScreen() {
         rate: lang === "pg" ? 0.95 : 0.85,
       });
     } catch {}
+
     setTimeout(() => setAudioPlaying(false), 2200);
-  }, [revealed, tr, en, lang, idNum]);
+  }, [tr, en, lang, idNum]);
 
   const animateFlip = useCallback(() => {
     Animated.timing(flip, {
@@ -170,7 +178,9 @@ export default function LearnTabScreen() {
       easing: easing.emphasized,
       useNativeDriver: true,
     }).start();
+
     setRevealed((v) => !v);
+
     try {
       haptics.selectionAsync();
     } catch {}
@@ -190,6 +200,7 @@ export default function LearnTabScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
     flip.setValue(0);
     setRevealed(false);
     setIdx((v) => (v + 1 >= total ? 0 : v + 1));
@@ -209,6 +220,7 @@ export default function LearnTabScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
     flip.setValue(0);
     setRevealed(false);
     setIdx((v) => (v - 1 < 0 ? total - 1 : v - 1));
@@ -251,6 +263,7 @@ export default function LearnTabScreen() {
     const ids = (flashcards as readonly any[])
       .map((c) => Number(c.id))
       .filter((n) => Number.isFinite(n));
+
     setOrder(shuffle(ids));
     setIdx(0);
     setRevealed(false);
@@ -262,14 +275,17 @@ export default function LearnTabScreen() {
     inputRange: [0, 1],
     outputRange: ["0deg", "180deg"],
   });
+
   const backRotate = flip.interpolate({
     inputRange: [0, 1],
     outputRange: ["180deg", "360deg"],
   });
+
   const frontOpacity = flip.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [1, 0, 0],
   });
+
   const backOpacity = flip.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0, 0, 1],
@@ -279,7 +295,10 @@ export default function LearnTabScreen() {
     <View
       style={[
         styles.root,
-        { backgroundColor: accent.surface, paddingTop: insets.top + spacing.sm },
+        {
+          backgroundColor: accent.surface,
+          paddingTop: insets.top + spacing.sm,
+        },
       ]}
     >
       <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -322,10 +341,12 @@ export default function LearnTabScreen() {
           <Text variant="caption" tone="soft">
             {idx + 1} / {total}
           </Text>
+
           <Text variant="caption" tone="soft">
             {learnedSet.size} learned
           </Text>
         </View>
+
         <ProgressBar
           value={idx + 1}
           max={total}
@@ -335,125 +356,134 @@ export default function LearnTabScreen() {
         />
       </View>
 
-      <View style={styles.cardArea}>
-        <Animated.View
-          style={{ transform: [{ translateX: swipe }] }}
-          collapsable={false}
-        >
-          <Pressable onPress={animateFlip} accessibilityRole="button">
-            <View style={styles.flipWrap}>
-              <Animated.View
-                style={[
-                  styles.card,
-                  shadows.lg,
-                  {
-                    backgroundColor: palette.white,
-                    transform: [{ perspective: 1000 }, { rotateY: frontRotate }],
-                    opacity: frontOpacity,
-                  },
-                ]}
-              >
-                <CardContent
-                  eyebrow={category.toUpperCase()}
-                  big={tr || prettyWord(en, idNum)}
-                  small={`Tap to reveal English`}
-                  accent={accent.primary}
-                  accentDeep={accent.primaryDeep}
-                  isLearned={isLearned}
-                />
-              </Animated.View>
-
-              <Animated.View
-                style={[
-                  styles.card,
-                  styles.cardBack,
-                  shadows.lg,
-                  {
-                    backgroundColor: accent.surface,
-                    transform: [{ perspective: 1000 }, { rotateY: backRotate }],
-                    opacity: backOpacity,
-                  },
-                ]}
-              >
-                <CardContent
-                  eyebrow="ENGLISH"
-                  big={en}
-                  small={tr ? `${tr} · ${LANG_LABELS[lang]}` : LANG_LABELS[lang]}
-                  accent={accent.primary}
-                  accentDeep={accent.primaryDeep}
-                  isLearned={isLearned}
-                  flipped
-                />
-              </Animated.View>
-            </View>
-          </Pressable>
-        </Animated.View>
-
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.celebrate,
-            {
-              opacity: celebrate,
-              transform: [
-                {
-                  scale: celebrate.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.7, 1.1],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <View style={[styles.celebrateChip, { backgroundColor: accent.primary }]}>
-            <Ionicons name="checkmark-circle" size={18} color={palette.white} />
-            <Text variant="bodyStrong" style={{ color: palette.white }}>Learned</Text>
-          </View>
-        </Animated.View>
-
-        <View style={styles.audioWrap}>
-          <AudioButton
-            onPress={play}
-            playing={audioPlaying}
-            tint={accent.primary}
-            size={72}
-            accessibilityLabel={`Play ${tr || en}`}
-          />
-        </View>
-      </View>
-
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 100 }]}>
-        <NavButton icon="chevron-back" onPress={goPrev} accent={accent.primary} />
-
-        <Pressable
-          onPress={toggleLearned}
-          style={({ pressed }) => [
-            styles.learnedButton,
-            {
-              backgroundColor: isLearned ? accent.primary : palette.white,
-              borderColor: isLearned ? accent.primary : palette.hairline,
-            },
-            pressed && { transform: [{ scale: pressScale.medium }] },
-          ]}
-        >
-          <Ionicons
-            name={isLearned ? "checkmark-circle" : "ellipse-outline"}
-            size={20}
-            color={isLearned ? palette.white : accent.primaryDeep}
-          />
-          <Text
-            variant="button"
-            style={{
-              color: isLearned ? palette.white : accent.primaryDeep,
-              marginLeft: spacing.xs,
-            }}
+      <View style={styles.mainContent}>
+        <View style={styles.cardArea}>
+          <Animated.View
+            style={{ transform: [{ translateX: swipe }] }}
+            collapsable={false}
           >
-            {isLearned ? "Learned" : "Mark learned"}
-          </Text>
-        </Pressable>
+            <Pressable onPress={animateFlip} accessibilityRole="button">
+              <View style={[styles.flipWrap, { maxHeight: cardMaxHeight }]}>
+                <Animated.View
+                  style={[
+                    styles.card,
+                    shadows.lg,
+                    {
+                      backgroundColor: palette.white,
+                      transform: [{ perspective: 1000 }, { rotateY: frontRotate }],
+                      opacity: frontOpacity,
+                    },
+                  ]}
+                >
+                  <CardContent
+                    eyebrow={category.toUpperCase()}
+                    big={tr || prettyWord(en, idNum)}
+                    small="Tap to reveal English"
+                    accent={accent.primary}
+                    accentDeep={accent.primaryDeep}
+                    isLearned={isLearned}
+                    compact={isCompact}
+                  />
+                </Animated.View>
 
-        <NavButton icon="chevron-forward" onPress={goNext} accent={accent.primary} />
+                <Animated.View
+                  style={[
+                    styles.card,
+                    styles.cardBack,
+                    shadows.lg,
+                    {
+                      backgroundColor: accent.surface,
+                      transform: [{ perspective: 1000 }, { rotateY: backRotate }],
+                      opacity: backOpacity,
+                    },
+                  ]}
+                >
+                  <CardContent
+                    eyebrow="ENGLISH"
+                    big={en}
+                    small={tr ? `${tr} · ${LANG_LABELS[lang]}` : LANG_LABELS[lang]}
+                    accent={accent.primary}
+                    accentDeep={accent.primaryDeep}
+                    isLearned={isLearned}
+                    flipped
+                    compact={isCompact}
+                  />
+                </Animated.View>
+              </View>
+            </Pressable>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.celebrate,
+              {
+                opacity: celebrate,
+                transform: [
+                  {
+                    scale: celebrate.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.7, 1.1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={[styles.celebrateChip, { backgroundColor: accent.primary }]}>
+              <Ionicons name="checkmark-circle" size={18} color={palette.white} />
+              <Text variant="bodyStrong" style={{ color: palette.white }}>
+                Learned
+              </Text>
+            </View>
+          </Animated.View>
+        </View>
+
+        <View style={styles.controlsArea}>
+          <View style={styles.audioWrap}>
+            <AudioButton
+              onPress={play}
+              playing={audioPlaying}
+              tint={accent.primary}
+              size={audioSize}
+              accessibilityLabel={`Play ${tr || en}`}
+            />
+          </View>
+
+          <View style={styles.actionRow}>
+            <NavButton icon="chevron-back" onPress={goPrev} accent={accent.primary} />
+
+            <Pressable
+              onPress={toggleLearned}
+              style={({ pressed }) => [
+                styles.learnedButton,
+                {
+                  backgroundColor: isLearned ? accent.primary : palette.white,
+                  borderColor: isLearned ? accent.primary : palette.hairline,
+                },
+                pressed && { transform: [{ scale: pressScale.medium }] },
+              ]}
+            >
+              <Ionicons
+                name={isLearned ? "checkmark-circle" : "ellipse-outline"}
+                size={20}
+                color={isLearned ? palette.white : accent.primaryDeep}
+              />
+
+              <Text
+                variant="button"
+                style={{
+                  color: isLearned ? palette.white : accent.primaryDeep,
+                  marginLeft: spacing.xs,
+                }}
+              >
+                {isLearned ? "Learned" : "Mark learned"}
+              </Text>
+            </Pressable>
+
+            <NavButton icon="chevron-forward" onPress={goNext} accent={accent.primary} />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -467,6 +497,7 @@ function CardContent({
   accentDeep,
   isLearned,
   flipped,
+  compact,
 }: {
   eyebrow: string;
   big: string;
@@ -475,6 +506,7 @@ function CardContent({
   accentDeep: string;
   isLearned: boolean;
   flipped?: boolean;
+  compact: boolean;
 }) {
   return (
     <View style={styles.cardInner}>
@@ -498,7 +530,17 @@ function CardContent({
           align="center"
           style={{
             color: flipped ? accentDeep : palette.ink,
-            fontSize: big.length > 14 ? 36 : big.length > 8 ? 48 : 56,
+            fontSize: compact
+              ? big.length > 14
+                ? 30
+                : big.length > 8
+                ? 40
+                : 48
+              : big.length > 14
+              ? 34
+              : big.length > 8
+              ? 46
+              : 54,
           }}
           numberOfLines={2}
         >
@@ -506,7 +548,12 @@ function CardContent({
         </Text>
       </View>
 
-      <Text variant="subtitle" tone="soft" align="center" style={{ marginTop: spacing.sm }}>
+      <Text
+        variant="subtitle"
+        tone="soft"
+        align="center"
+        style={{ marginTop: spacing.sm }}
+      >
         {small}
       </Text>
     </View>
@@ -533,13 +580,15 @@ function NavButton({
       ]}
       hitSlop={6}
     >
-      <Ionicons name={icon} size={26} color={accent} />
+      <Ionicons name={icon} size={25} color={accent} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: {
+    flex: 1,
+  },
 
   topBar: {
     flexDirection: "row",
@@ -558,7 +607,8 @@ const styles = StyleSheet.create({
 
   progressWrap: {
     paddingHorizontal: spacing.xl,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
+    zIndex: 5,
   },
   progressMeta: {
     flexDirection: "row",
@@ -566,16 +616,21 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  cardArea: {
+  mainContent: {
     flex: 1,
     paddingHorizontal: spacing.xl,
-    justifyContent: "center",
-    alignItems: "stretch",
+    paddingTop: spacing.md,
+    paddingBottom: 116,
+    justifyContent: "space-between",
+  },
+
+  cardArea: {
+    flexShrink: 1,
+    justifyContent: "flex-start",
   },
   flipWrap: {
     width: "100%",
-    aspectRatio: 0.78,
-    maxHeight: 460,
+    aspectRatio: 0.82,
     alignSelf: "center",
     position: "relative",
   },
@@ -627,33 +682,37 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
 
+  controlsArea: {
+    flexShrink: 0,
+    marginTop: spacing.md,
+  },
   audioWrap: {
     alignItems: "center",
-    marginTop: spacing.xl,
+    marginBottom: spacing.md,
   },
 
-  bottomBar: {
+  actionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
     gap: spacing.md,
   },
   navBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     alignItems: "center",
     justifyContent: "center",
   },
   learnedButton: {
     flex: 1,
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.pill,
     borderWidth: 1.5,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
 });
