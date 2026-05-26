@@ -21,7 +21,7 @@
       }
     },
     "android": {
-      "package": "com.anonymous.africankidspeaks",
+      "package": "com.westforge.africankidspeaks",
       "versionCode": 11,
       "permissions": [],
       "blockedPermissions": [
